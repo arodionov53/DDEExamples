@@ -89,6 +89,10 @@ sol(3.7)       # interpolate at any time
 
 All examples use `MethodOfSteps(Tsit5())` — the standard Method of Steps wrapping a 5th-order adaptive Runge-Kutta solver.
 
+## References
+
+- [DDEProblem API](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/) — constructor, history function interface, `constant_lags` vs `dependent_lags`
+
 ## Dependencies
 
 - [DelayDiffEq.jl](https://github.com/SciML/DelayDiffEq.jl)

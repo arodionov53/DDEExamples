@@ -583,3 +583,9 @@ sol(15.3)      # interpolate at any time
 sim.u[1]       # first trajectory (an ODESolution)
 sim.u[1].prob.p[3]  # the delay τ used in that trajectory
 ```
+
+---
+
+## References
+
+- [DDEProblem API](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/) — constructor signature, history function interface, `constant_lags` vs `dependent_lags`, neutral DDEs, and problem variants (`DynamicalDDEProblem`, `SecondOrderDDEProblem`)
