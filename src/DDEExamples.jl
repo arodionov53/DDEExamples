@@ -8,7 +8,7 @@ using Statistics: mean, std
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
        solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
-       demo_budget_delay,
+       demo_budget_delay, demo_budget_delay_with_noise,
        demo, demo_zero_delay
 
 """
@@ -329,6 +329,72 @@ function demo_budget_delay(;
                plot_title = title)
     savefig(fig, "budget_delay.png")
     println("Plot saved to budget_delay.png")
+    fig
+end
+
+"""
+    demo_budget_delay_with_noise(; Q, T, delays, noise_levels, n_samples)
+
+Show how τ noise affects each of the three spending strategies.
+
+Layout: one row per delay value, three columns (one per strategy).
+Within each subplot several noise levels are overlaid as mean ± 1σ bands,
+so the reader can see both the bias (mean deviation from ideal) and the
+spread (sensitivity to τ uncertainty).
+
+Saves `budget_delay_noise.png`.
+"""
+function demo_budget_delay_with_noise(;
+    Q = 100.0, T = 10.0,
+    delays = [0.1, 0.5] .* T,             # 10% and 50% of T
+    noise_levels = [0.0, 0.05, 0.15, 0.30],
+    n_samples = 40
+)
+    ts = range(0.0, T - 1e-3; length = 500)
+    ideal_spent = Q .* ts ./ T
+
+    strategies = [
+        ("Naive",           solve_budget_delay,           u -> Q .- u.(ts; idxs = 1)),
+        ("Corrected denom", solve_budget_corrected_denom, u -> Q .- u.(ts; idxs = 1)),
+        ("Smith predictor", solve_budget_smith,           u -> u.(ts; idxs = 2)),
+    ]
+
+    plts = []
+    for τ in delays
+        τ_pct = round(100.0 * τ / T; digits = 1)
+        for (col, (name, solver, extractor)) in enumerate(strategies)
+            p = plot(ts, ideal_spent;
+                label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+                xlabel = "time", ylabel = "spent",
+                title = "$name  (τ=$(τ_pct)%·T)",
+                legend = :topleft, ylims = (0, :auto))
+            hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+
+            for noise in noise_levels
+                cols = Vector{Vector{Float64}}()
+                while length(cols) < max(1, n_samples)
+                    τ_i = noise > 0 ? τ * (1 + noise * (2*rand() - 1)) : τ
+                    sol = solver(; Q, T, τ = τ_i)
+                    sol.retcode == ReturnCode.Success || continue
+                    push!(cols, extractor(sol))
+                end
+                utils = hcat(cols...)
+                μ = vec(mean(utils; dims = 2))
+                σ = noise > 0 ? vec(std(utils; dims = 2)) : zeros(length(ts))
+                spent_end = round(μ[end]; digits = 1)
+                lbl = noise == 0.0 ? "no noise ($(spent_end))" :
+                                     "±$(round(Int, noise*100))% ($(spent_end))"
+                plot!(p, ts, μ; ribbon = σ, fillalpha = 0.15, linewidth = 2, label = lbl)
+            end
+            push!(plts, p)
+        end
+    end
+
+    nrows = length(delays)
+    fig = plot(plts...; layout = (nrows, 3), size = (1100, 380 * nrows),
+               plot_title = "Effect of τ noise on spending strategies  (Q=$Q, T=$T)")
+    savefig(fig, "budget_delay_noise.png")
+    println("Plot saved to budget_delay_noise.png")
     fig
 end
 

@@ -19,6 +19,18 @@ Example 5 also includes two corrective strategies:
 - **Corrected denominator** — `dB/dt = -B(t-τ)/(T-t+τ)`, a one-line fix that works well for small delays
 - **Smith predictor** — reconstructs the true current balance from the delayed observation and cumulative spend history; achieves perfect pacing at any delay
 
+### Noise sensitivity
+
+`demo_budget_delay_with_noise` compares all three strategies across multiple τ noise levels (2×3 grid: two delay values × three strategies):
+
+![Effect of τ noise on spending strategies](budget_delay_noise.png)
+
+| Strategy | τ = 10%·T | τ = 50%·T | Noise sensitivity |
+|----------|-----------|-----------|-------------------|
+| Naive | 111% spent | 413% spent | Low bias change, moderate spread |
+| Corrected denom | 100% | 95% (under-spends) | Bias dominates, noise negligible |
+| Smith predictor | 100% | 100% | Immune — all curves overlap |
+
 ## Installation
 
 ```julia
@@ -45,6 +57,11 @@ DDEExamples.demo_zero_delay()
 demo_budget_delay()                          # default: 5%, 10%, 50% of T
 demo_budget_delay(delays = [1.0, 2.0, 3.0]) # custom delays
 demo_budget_delay(tau_noise = 0.03)          # add ±3% noise to τ
+
+# Noise sensitivity: compare strategies across noise levels (saves budget_delay_noise.png)
+demo_budget_delay_with_noise()                              # default: τ = 10% and 50% of T
+demo_budget_delay_with_noise(delays = [0.1, 0.3, 0.5] .* 10.0)  # custom delays
+demo_budget_delay_with_noise(noise_levels = [0.0, 0.1, 0.5])     # custom noise levels
 ```
 
 ### Solve individually
