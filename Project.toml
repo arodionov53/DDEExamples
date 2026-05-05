@@ -1,0 +1,16 @@
+name = "DDEExamples"
+uuid = "0227aef9-b346-4e8a-af79-d9b02786c483"
+version = "0.1.0"
+authors = ["a.rodionov <a.rodionov@samsung.com>"]
+
+[deps]
+DelayDiffEq = "bcd4f6db-9728-5f36-b5f7-82caef46ccdb"
+DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[compat]
+DelayDiffEq = "6.0.0"
+DifferentialEquations = "8.0.0"
+Plots = "1.41.6"
+Statistics = "1.11.1"
