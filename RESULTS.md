@@ -576,6 +576,101 @@ small noise into large instability.
 
 ---
 
+## 5c. Production PIDPacer DDE Model
+
+### Background
+
+The file `pid_pacer.go` implements a production PID controller for ad-campaign
+budget pacing.  Its design differs from the academic PID in section 5b in
+several important ways that change the DDE dynamics:
+
+- **Rate-based error** rather than balance-based: `e(t) = targetRate - observedRate(t-τ)`.
+  The controller tracks the *flow* ($/s), not the stock (remaining budget).
+- **Sigmoid output** `prob(t) = 1 / (1 + exp(-PID))` maps the PID value to a
+  grant probability in [0, 1].  When PID output is near zero, prob ≈ 0.5 and the
+  system spends at half the target rate.
+- **Conservative default gains**: Kp=1.0, Ki=0.1, Kd=0.05.  The integral gain is
+  10× smaller than the section 5b PID, making error accumulation slow.
+- **Integral windup protection**: the integral is hard-clamped to ±10/Ki before
+  being multiplied by Ki, bounding the maximum correction the I-term can apply.
+- **Two-phase operation**: CruiseMode (probabilistic grants) transitions to
+  TerminalMode (token-based exact grants) once utilization reaches 95%.
+
+### DDE formulation
+
+The Go implementation is modeled as a 2-state DDE:
+
+    observedRate(t) ≈ (B(t-τ) - B(t-2τ)) / τ          (delayed finite difference)
+    e(t)            = Q/T - observedRate(t)
+    de(t)           ≈ (e(t) - e(t-τ)) / τ              (derivative via 3rd lag)
+    pid(t)          = Kp·e(t) + Ki·I(t) + Kd·de(t)
+    prob(t)         = 1 / (1 + exp(-pid(t)))
+    dB/dt           = -prob(t) · requestRate
+    dI/dt           = e(t)
+
+This requires three constant lags (τ, 2τ, 3τ).
+
+### What the plot shows
+
+![PIDPacer vs Smith vs Corrected denom](pid_pacer_comparison.png)
+
+| τ | PID pacer | Smith | Corr. denom |
+|---|-----------|-------|-------------|
+| 5%·T | **76%** (under-spends) | 100% | 100% |
+| 10%·T | **87%** | 100% | 100% |
+| 30%·T | **99%** | 100% | 100% |
+
+### Analysis
+
+**Under-spending instead of over-spending:** Unlike the naive controller, the
+production PIDPacer under-delivers.  The sigmoid initialises near 0.5 (50%
+grant probability) when the PID output is near zero, so the system starts by
+spending at half the target rate.  The slow integral (Ki=0.1) takes time to
+accumulate enough to push the probability toward 1.0.  At small delays (5-10%·T)
+the integral never fully catches up before the deadline.
+
+**Step-shaped curve at small τ:** The finite-difference derivative approximation
+over 3τ lags introduces a staircase artefact when τ is small relative to T.
+Each "step" corresponds to a new derivative estimate arriving after one lag
+period.  This is a discretisation artifact of the DDE model — in production the
+controller runs at a fixed sample time (1 second by default), which has the same
+effect.
+
+**Convergence at large τ:** Paradoxically, at τ=30%·T the PIDPacer achieves
+99% utilization.  The longer delay gives the slow integral more time to wind up
+to the correction needed.  This inverts the usual expectation: the production
+system performs *better* at longer delays, at the cost of a late-stage spending
+surge rather than a smooth ramp.
+
+**Noise insensitivity:** The sigmoid acts as a natural limiter — its output is
+bounded to [0,1] regardless of noise in τ, so the spend-rate band stays tight
+across all delay noise levels.  This is the main practical advantage of the
+sigmoid over a raw PID output.
+
+**Implication:** The production system is tuned to avoid overspending at the
+cost of potential under-delivery.  Applying a Smith predictor to reconstruct the
+true current rate (eliminating τ from the feedback loop) would allow more
+aggressive gains without risking overspend, improving utilization at small delays
+while preserving the sigmoid's safety cap.
+
+### Try it yourself
+
+```julia
+# Default production gains
+sol = solve_budget_pid_pacer(Q = 100.0, T = 10.0, τ = 1.0)
+
+# More aggressive Ki — faster catch-up, closer to 100% at small τ
+sol = solve_budget_pid_pacer(τ = 0.5, Ki = 0.5)
+
+# Compare with Smith and corrected denom across delays
+demo_pid_pacer()
+
+# With ±15% τ noise
+demo_pid_pacer(tau_noise = 0.15, n_samples = 40)
+```
+
+---
+
 ## 6. Zero-Delay Comparison (DDE vs ODE)
 
 Setting τ = 0 in a DDE reduces it to an ordinary differential equation (ODE),
