@@ -504,6 +504,34 @@ Smith predictor avoids this entirely by computing the delay-free error
 `B̂(t) = B(t)` using the internal model, effectively removing τ from the
 feedback loop's characteristic equation.
 
+### Why Naive and PID exceed the budget cap
+
+Both fail for the same root cause — **delayed feedback means corrective
+signals arrive too late** — but through different mechanisms.
+
+**Naive:** The spend rate is `B(t-τ) / (T-t)`.  Since `B(t-τ) > B(t)`
+always (the controller hasn't yet seen recent spending), the rate is
+systematically too high.  As `T-t → 0` the denominator shrinks while the
+numerator stays inflated, causing the rate to explode.  The controller
+doesn't know it is overspending until τ time units after the fact — by which
+point it is already past the cap.
+
+**PID:** The culprit is **integral windup**.  Early in the horizon,
+`B(t-τ)` is still close to `B_ref(t-τ)`, so the error `e(t)` looks small
+and the integral `I(t) = ∫e ds` accumulates quietly.  When the true error
+finally propagates through the delay and `e(t)` grows large, `I(t)` has
+already wound up to a large value.  The combined `Kp·e + Ki·I` drives a
+sudden spend spike.  With large τ this oscillation diverges: the delay adds
+phase lag `ω·τ` at every frequency ω, the loop's phase margin goes negative,
+and no gain tuning can restore stability.
+
+**Why Smith and corrected-denom don't overshoot:**
+
+- **Corrected denom** uses `(T-t+τ)` in the denominator, pre-accounting for
+  the stale reading so the rate is always conservative enough.
+- **Smith predictor** reconstructs `B̂(t) = B(t)` exactly, so the feedback
+  loop sees zero effective delay — no phase lag, no windup, no overshoot.
+
 ### When to use each controller
 
 | Controller | Best for | Limitation |
