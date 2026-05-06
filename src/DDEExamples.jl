@@ -9,7 +9,7 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
        solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
        solve_budget_pid, demo_budget_controllers, demo_budget_controllers_noise,
-       solve_budget_pid_pacer, demo_pid_pacer,
+       solve_budget_pid_pacer, demo_pid_pacer, demo_pid_pacer_noise,
        demo_budget_delay, demo_budget_delay_with_noise,
        demo, demo_zero_delay
 
@@ -701,6 +701,72 @@ function demo_pid_pacer(;
                plot_title="PIDPacer vs Smith vs Corr.denom  (Q=$Q, T=$T$noise_str)")
     savefig(fig, "pid_pacer_comparison.png")
     println("Plot saved to pid_pacer_comparison.png")
+    fig
+end
+
+"""
+    demo_pid_pacer_noise(; Q, T, delays, noise_levels, n_samples)
+
+Show how τ noise affects the PIDPacer vs Smith and corrected denominator.
+Layout: one row per delay, three columns (one per controller).
+Each cell overlays several noise levels as mean ± 1σ bands.
+
+Saves `pid_pacer_noise.png`.
+"""
+function demo_pid_pacer_noise(;
+    Q            = 100.0,
+    T            = 10.0,
+    delays       = [0.05, 0.1, 0.3] .* T,
+    noise_levels = [0.0, 0.10, 0.30],
+    n_samples    = 40,
+    Kp = 1.0, Ki = 0.1, Kd = 0.05
+)
+    ts          = range(0.0, T - 1e-3; length = 500)
+    ideal_spent = Q .* ts ./ T
+
+    strategies = [
+        ("Smith",       (;Q,T,τ) -> solve_budget_smith(; Q,T,τ),           u -> u.(ts; idxs=2)),
+        ("Corr. denom", (;Q,T,τ) -> solve_budget_corrected_denom(; Q,T,τ), u -> Q .- u.(ts; idxs=1)),
+        ("PID pacer",   (;Q,T,τ) -> solve_budget_pid_pacer(; Q,T,τ,Kp,Ki,Kd), u -> Q .- u.(ts; idxs=1)),
+    ]
+
+    plts = []
+    for τ in delays
+        τ_pct = round(100.0 * τ / T; digits = 1)
+        for (name, solver, extractor) in strategies
+            p = plot(ts, ideal_spent;
+                label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+                xlabel = "time", ylabel = "spent",
+                title  = "$name  (τ=$(τ_pct)%·T)",
+                legend = :topleft, ylims = (0, :auto))
+            hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+
+            for noise in noise_levels
+                cols = Vector{Vector{Float64}}()
+                while length(cols) < max(1, n_samples)
+                    τ_i = noise > 0 ? τ * (1 + noise * (2*rand() - 1)) : τ
+                    sol = solver(; Q, T, τ = τ_i)
+                    sol.retcode == ReturnCode.Success || continue
+                    push!(cols, extractor(sol))
+                end
+                utils    = hcat(cols...)
+                μ        = vec(mean(utils; dims = 2))
+                σ        = noise > 0 ? vec(std(utils; dims = 2)) : zeros(length(ts))
+                spent_end = round(μ[end]; digits = 1)
+                lbl = noise == 0.0 ? "no noise ($spent_end)" :
+                                     "±$(round(Int, noise*100))% ($spent_end)"
+                plot!(p, ts, μ; ribbon = σ, fillalpha = 0.15, linewidth = 2, label = lbl)
+            end
+            push!(plts, p)
+        end
+    end
+
+    nrows = length(delays)
+    fig = plot(plts...; layout = (nrows, length(strategies)),
+               size = (380 * length(strategies), 400 * nrows),
+               plot_title = "PIDPacer noise sensitivity  (Q=$Q, T=$T)")
+    savefig(fig, "pid_pacer_noise.png")
+    println("Plot saved to pid_pacer_noise.png")
     fig
 end
 

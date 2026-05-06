@@ -653,6 +653,42 @@ true current rate (eliminating τ from the feedback loop) would allow more
 aggressive gains without risking overspend, improving utilization at small delays
 while preserving the sigmoid's safety cap.
 
+### Noise sensitivity of the PIDPacer
+
+`demo_pid_pacer_noise` runs the same three controllers under τ noise, using a
+3×3 grid (one row per delay, one column per controller).
+
+![PIDPacer noise sensitivity](pid_pacer_noise.png)
+
+| Controller | τ=5%·T | τ=10%·T | τ=30%·T | Noise band |
+|------------|--------|---------|---------|------------|
+| Smith | 100.0 | 100.0 | 100.0 | Negligible |
+| Corr. denom | 100.0 | 100.0 | 99.8 | Negligible |
+| PID pacer | 76 | 87 | 99 | Tight |
+
+**PIDPacer is remarkably noise-insensitive** despite having no explicit noise
+protection.  The sigmoid `1/(1+exp(-PID))` saturates the output to [0,1]: even
+large perturbations in τ only shift when the rate estimate arrives, not how
+large the resulting probability is.  The ±10% and ±30% noise bands for the
+PIDPacer are almost identical — the curves overlap.
+
+This contrasts sharply with the academic PID (section 5b), where noise widens
+the band dramatically and causes instability at large τ.  The key difference is
+the sigmoid: it acts as a hard nonlinear limiter that prevents the integral
+windup from driving the output out of bounds, regardless of how noisy the
+delayed input is.
+
+**Bias persists under noise:** Noise does not rescue the under-spending bias —
+the mean stays at 76% / 87% / 99% regardless of noise level.  The sigmoid
+protects against explosions but not against the structural under-delivery caused
+by the slow integral.
+
+**Practical takeaway:** The production PIDPacer is a robust but conservative
+controller.  It will not overspend under any realistic τ noise scenario.  The
+cost is systematic under-delivery at short delays.  A Smith predictor inserted
+between the delayed observation and the PID input would eliminate the bias
+without affecting the sigmoid's noise-rejection properties.
+
 ### Try it yourself
 
 ```julia
