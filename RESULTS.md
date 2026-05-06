@@ -532,13 +532,46 @@ and no gain tuning can restore stability.
 - **Smith predictor** reconstructs `B̂(t) = B(t)` exactly, so the feedback
   loop sees zero effective delay — no phase lag, no windup, no overshoot.
 
+### Controllers under random τ noise
+
+In practice the delay τ is rarely known exactly — it may vary due to
+reporting lags, data pipeline jitter, or measurement uncertainty.
+`demo_budget_controllers_noise` runs each controller across an ensemble of
+trajectories where τ is drawn from Uniform(τ·(1-noise), τ·(1+noise)).
+
+![Controllers under random τ noise](budget_controllers_noise.png)
+
+| Controller | Small τ, with noise | Large τ, with noise |
+|------------|---------------------|---------------------|
+| Naive | Biased ~11%, small spread | Heavily biased + wide spread |
+| Corr. denom | Near 100%, noise-insensitive | ~100%, still noise-insensitive |
+| Smith predictor | Exactly 100%, completely immune | Exactly 100%, completely immune |
+| PID | Near 100% but noise widens band | Unstable — noise causes divergence |
+
+**τ = 10%·T:** All controllers except Naive are close to 100%.  PID shows
+a noticeably wider uncertainty band than Smith or corrected denominator —
+the integral term amplifies noise in the error signal.
+
+**τ = 30%·T:** PID becomes unstable and noise dramatically widens its band;
+individual trajectories diverge wildly.  Corrected denominator remains
+noise-insensitive because its correction is purely algebraic (no integral
+accumulation).  Smith predictor is unchanged — noise in τ only slightly
+shifts which past value is used, leaving the mean at 100% with minimal spread.
+
+**Key insight on robustness:** The Smith predictor's immunity to τ noise
+follows from the same reason it achieves exact tracking — it reconstructs
+`B̂(t) = B(t)` from the model, so the actual value of τ matters only for
+interpolating the history, not for the control law itself.  PID, lacking any
+internal model, has no such protection and its integral state amplifies even
+small noise into large instability.
+
 ### When to use each controller
 
 | Controller | Best for | Limitation |
 |------------|----------|------------|
 | Naive | Baseline / reference only | Always overspends |
 | Corrected denom | Small delays (τ < 20%·T), minimal code change | Approximation error grows with τ |
-| PID | Small delays with unknown dynamics | Unstable for τ > ~20%·T |
+| PID | Small delays with unknown dynamics | Unstable for τ > ~20%·T; noise-sensitive |
 | Smith predictor | Any delay when the model is known | Requires explicit model of spending process |
 
 ---
