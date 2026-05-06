@@ -8,7 +8,7 @@ using Statistics: mean, std
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
        solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
-       solve_budget_pid, demo_budget_controllers,
+       solve_budget_pid, demo_budget_controllers, demo_budget_controllers_noise,
        demo_budget_delay, demo_budget_delay_with_noise,
        demo, demo_zero_delay
 
@@ -312,8 +312,8 @@ function solve_budget_pid(;
 
     h(p, t) = [Q, 0.0]
     p = (Q, T, τ, Kp, Ki, Kd)
-    prob = DDEProblem(pid!, [Q, 0.0], h, tspan, p; constant_lags = [τ, 2τ])
-    solve(prob, MethodOfSteps(Tsit5()))
+    prob = DDEProblem(pid!, [Q, 0.0], h, tspan, p; constant_lags = [τ, 2.0*τ])
+    solve(prob, MethodOfSteps(Tsit5()); dtmax = τ / 10)
 end
 
 """
@@ -372,6 +372,75 @@ function demo_budget_controllers(;
                plot_title = "Budget spending controllers (Q=$Q, T=$T)")
     savefig(fig, "budget_controllers.png")
     println("Plot saved to budget_controllers.png")
+    fig
+end
+
+"""
+    demo_budget_controllers_noise(; Q, T, delays, noise_levels, n_samples, Kp, Ki, Kd)
+
+Compare all four controllers (Naive, Corrected denom, Smith, PID) under
+random τ noise.  Layout: one row per delay, one column per controller.
+Each cell shows mean ± 1σ bands across `n_samples` trajectories with τ
+drawn from Uniform(τ·(1-noise), τ·(1+noise)) for each noise level.
+
+Saves `budget_controllers_noise.png`.
+"""
+function demo_budget_controllers_noise(;
+    Q = 100.0, T = 10.0,
+    delays      = [0.1, 0.3] .* T,
+    noise_levels = [0.0, 0.10, 0.30],
+    n_samples   = 40,
+    Kp = 1.0, Ki = 0.5, Kd = 0.1
+)
+    ts = range(0.0, T - 1e-3; length = 500)
+    ideal_spent = Q .* ts ./ T
+
+    strategies = [
+        ("Naive",           solve_budget_delay,           u -> Q .- u.(ts; idxs = 1)),
+        ("Corr. denom",     solve_budget_corrected_denom, u -> Q .- u.(ts; idxs = 1)),
+        ("Smith",           solve_budget_smith,           u -> u.(ts; idxs = 2)),
+        ("PID",             (;Q,T,τ) -> solve_budget_pid(;Q,T,τ,
+                                Kp=Kp/(1+τ/T), Ki=Ki/(1+τ/T)^2, Kd=Kd/(1+τ/T)),
+                                                          u -> Q .- u.(ts; idxs = 1)),
+    ]
+
+    plts = []
+    for τ in delays
+        τ_pct = round(100.0 * τ / T; digits = 1)
+        for (name, solver, extractor) in strategies
+            p = plot(ts, ideal_spent;
+                label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+                xlabel = "time", ylabel = "spent",
+                title = "$name  (τ=$(τ_pct)%·T)",
+                legend = :topleft, ylims = (0, :auto))
+            hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+
+            for noise in noise_levels
+                cols = Vector{Vector{Float64}}()
+                while length(cols) < max(1, n_samples)
+                    τ_i = noise > 0 ? τ * (1 + noise * (2*rand() - 1)) : τ
+                    sol = solver(; Q, T, τ = τ_i)
+                    sol.retcode == ReturnCode.Success || continue
+                    push!(cols, extractor(sol))
+                end
+                utils = hcat(cols...)
+                μ = vec(mean(utils; dims = 2))
+                σ = noise > 0 ? vec(std(utils; dims = 2)) : zeros(length(ts))
+                spent_end = round(μ[end]; digits = 1)
+                lbl = noise == 0.0 ? "no noise ($(spent_end))" :
+                                     "±$(round(Int, noise*100))% ($(spent_end))"
+                plot!(p, ts, μ; ribbon = σ, fillalpha = 0.15, linewidth = 2, label = lbl)
+            end
+            push!(plts, p)
+        end
+    end
+
+    nrows = length(delays)
+    fig = plot(plts...; layout = (nrows, length(strategies)),
+               size = (380 * length(strategies), 400 * nrows),
+               plot_title = "Controllers under random τ noise  (Q=$Q, T=$T)")
+    savefig(fig, "budget_controllers_noise.png")
+    println("Plot saved to budget_controllers_noise.png")
     fig
 end
 
