@@ -428,7 +428,90 @@ demo_budget_delay(delays = [0.05, 0.1, 0.5] .* 10.0)
 
 # Real-world scale: annual budget, 1-month reporting lag
 demo_budget_delay(Q = 1_000_000.0, T = 12.0, delays = [1.0, 2.0, 3.0])
+
+# Compare all four controllers including PID
+demo_budget_controllers()
+demo_budget_controllers(delays = [0.1, 0.3, 0.5] .* 10.0, Kp = 2.0, Ki = 1.0)
+
+# PID solver directly
+sol = solve_budget_pid(Q = 100.0, T = 10.0, τ = 1.0, Kp = 1.0, Ki = 0.5, Kd = 0.1)
 ```
+
+---
+
+## 5b. Controller Comparison: PID vs Smith Predictor vs Corrected Denominator
+
+### Motivation
+
+The naive, corrected-denominator, and Smith-predictor controllers all assume
+the spending rate can be set freely at each instant.  A natural question is
+whether a standard feedback controller — a **PID** — can match or beat the
+model-based approaches without requiring an explicit internal model of the
+delay.
+
+### PID formulation
+
+The PID controller tracks the reference trajectory B_ref(t) = Q·(1 - t/T)
+using the delayed error signal:
+
+    e(t)      = B(t-τ) - B_ref(t-τ)           (delayed tracking error)
+    ė(t)      ≈ (e(t) - e(t-τ)) / τ            (finite-difference derivative)
+    spend(t)  = Q/T + Kp·e(t) + Ki·I(t) + Kd·ė(t)
+
+where I(t) = ∫e(s)ds accumulates the error to remove steady-state offset.
+This requires two constant lags (τ and 2τ) and a second state variable I(t).
+
+To maintain stability across different delay magnitudes, gains are scaled by
+the delay ratio:
+
+    Kp_eff = Kp / (1 + τ/T),   Ki_eff = Ki / (1 + τ/T)²,   Kd_eff = Kd / (1 + τ/T)
+
+### What the plot shows
+
+![Controller comparison](budget_controllers.png)
+
+| Controller | τ = 10%·T | τ = 30%·T | τ = 50%·T |
+|------------|-----------|-----------|-----------|
+| Naive | 111.2% | 165.1% | 412.9% |
+| Corrected denom | 100.0% | 99.8% | 95.1% |
+| Smith predictor | **100.0%** | **100.0%** | **100.0%** |
+| PID (scaled gains) | 100.9% | 345.5% ⚠ | 255.4% ⚠ |
+
+### Analysis
+
+**Small delays (τ ≤ 10%·T):** PID performs comparably to corrected
+denominator, spending within 1% of the target.  The error signal arrives
+quickly enough that the integral term can correct minor deviations before
+they compound.
+
+**Moderate delays (τ = 30%·T):** PID becomes unstable (345% overspend).
+The integral term accumulates error over the long delay window, and by the
+time the corrective signal arrives the system has already overshot badly.
+Reducing Ki can delay onset of instability but also removes the steady-state
+correction.
+
+**Large delays (τ = 50%·T):** All non-model-based controllers fail.  Naive
+overspends 4×; PID 2.5×.  Corrected denominator under-spends (95%) — its
+approximation breaks down but at least it does not go unstable.  Only the
+Smith predictor maintains exact tracking.
+
+**Key insight:** PID instability at large delays is not a tuning problem —
+it is fundamental.  A PID with delay τ in the feedback loop has a
+characteristic equation with roots that cross into the right half-plane once
+τ exceeds roughly half the integral time constant (T_i = Kp/Ki).  No finite
+gain adjustment can fix this without explicitly modeling the delay.  The
+Smith predictor avoids this entirely by computing the delay-free error
+`B̂(t) = B(t)` using the internal model, effectively removing τ from the
+feedback loop's characteristic equation.
+
+### When to use each controller
+
+| Controller | Best for | Limitation |
+|------------|----------|------------|
+| Naive | Baseline / reference only | Always overspends |
+| Corrected denom | Small delays (τ < 20%·T), minimal code change | Approximation error grows with τ |
+| PID | Small delays with unknown dynamics | Unstable for τ > ~20%·T |
+| Smith predictor | Any delay when the model is known | Requires explicit model of spending process |
 
 ---
 

@@ -8,6 +8,7 @@ using Statistics: mean, std
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
        solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
+       solve_budget_pid, demo_budget_controllers,
        demo_budget_delay, demo_budget_delay_with_noise,
        demo, demo_zero_delay
 
@@ -268,6 +269,110 @@ function solve_budget_smith(;
     p = (Q, T, τ)
     prob = DDEProblem(budget_smith!, [Q, 0.0], h, tspan, p; constant_lags = [τ])
     solve(prob, MethodOfSteps(Tsit5()))
+end
+
+"""
+    solve_budget_pid(; Q, T, τ, Kp, Ki, Kd)
+
+PID controller for budget spending under information delay.
+
+State: u = [B(t), I(t)] where I(t) is the integral of the tracking error.
+
+The reference trajectory is B_ref(t) = Q·(1 - t/T) (ideal linear drawdown).
+The observed error uses the delayed balance:
+
+    e(t)     = B(t-τ) - B_ref(t-τ)        # delayed tracking error
+    spend(t) = Q/T + Kp·e(t) + Ki·I(t) + Kd·ė(t)
+
+where ė(t) = (e(t) - e(t-τ)) / τ is approximated via a second delay.
+I(t) integrates the delayed error to remove steady-state offset.
+
+Returns the DDE solution (index 1 = B, index 2 = I).
+"""
+function solve_budget_pid(;
+    Q = 100.0, T = 10.0, τ = 1.5,
+    Kp = 1.0, Ki = 0.5, Kd = 0.1,
+    tspan = (0.0, T - 1e-3)
+)
+    function pid!(du, u, h, p, t)
+        Q, T, τ, Kp, Ki, Kd = p
+        B_ref(s) = Q * (1 - s / T)
+
+        B_del  = h(p, t - τ)[1]
+        B_del2 = h(p, t - 2τ)[1]   # one extra delay for derivative estimate
+
+        e      = B_del  - B_ref(t - τ)
+        e_prev = B_del2 - B_ref(t - 2τ)
+        de     = τ > 0 ? (e - e_prev) / τ : 0.0
+
+        spend = Q / T + Kp * e + Ki * u[2] + Kd * de
+        du[1] = -spend
+        du[2] = e
+    end
+
+    h(p, t) = [Q, 0.0]
+    p = (Q, T, τ, Kp, Ki, Kd)
+    prob = DDEProblem(pid!, [Q, 0.0], h, tspan, p; constant_lags = [τ, 2τ])
+    solve(prob, MethodOfSteps(Tsit5()))
+end
+
+"""
+    demo_budget_controllers(; Q, T, delays)
+
+Compare four budget spending controllers under information delay:
+  - Naive (baseline)
+  - Corrected denominator
+  - Smith predictor
+  - PID
+
+One subplot per delay. Saves `budget_controllers.png`.
+"""
+function demo_budget_controllers(;
+    Q = 100.0, T = 10.0,
+    delays = [0.1, 0.3, 0.5] .* T,
+    Kp = 1.0, Ki = 0.5, Kd = 0.1
+)
+    ts = range(0.0, T - 1e-3; length = 500)
+    ideal_spent = Q .* ts ./ T
+
+    plts = map(delays) do τ
+        τ_pct = round(100.0 * τ / T; digits = 1)
+
+        p = plot(ts, ideal_spent;
+            label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+            xlabel = "time", ylabel = "spent",
+            title = "τ = $(τ_pct)%·T",
+            legend = :topleft, ylims = (0, :auto))
+        hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+
+        function add!(solver, label, color; idxs = 1, transform = s -> Q .- s)
+            sol = solver(; Q, T, τ)
+            ys = transform(sol.(ts; idxs = idxs))
+            spent_end = round(ys[end]; digits = 1)
+            plot!(p, ts, ys; label = "$label ($(spent_end))", linewidth = 2, color = color)
+        end
+
+        # scale gains by τ/T so PID stays stable across delay magnitudes
+        τ_scaled_Kp = Kp / (1 + τ / T)
+        τ_scaled_Ki = Ki / (1 + τ / T)^2
+        τ_scaled_Kd = Kd / (1 + τ / T)
+        pid_solver(; Q, T, τ) = solve_budget_pid(; Q, T, τ,
+            Kp = τ_scaled_Kp, Ki = τ_scaled_Ki, Kd = τ_scaled_Kd)
+
+        add!(solve_budget_delay,           "Naive",       :red)
+        add!(solve_budget_corrected_denom, "Corr. denom", :blue)
+        add!(solve_budget_smith,           "Smith",       :green;
+             idxs = 2, transform = identity)
+        add!(pid_solver,                   "PID",         :purple)
+        p
+    end
+
+    fig = plot(plts...; layout = (length(delays), 1),
+               size = (800, 360 * length(delays)),
+               plot_title = "Budget spending controllers (Q=$Q, T=$T)")
+    savefig(fig, "budget_controllers.png")
+    println("Plot saved to budget_controllers.png")
+    fig
 end
 
 """
