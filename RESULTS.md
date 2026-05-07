@@ -1133,6 +1133,106 @@ demo_demand_spike_then_drop(t_spike_frac = 0.2, t_drop_frac = 0.25)
 
 ---
 
+## 5g. Random Demand Events
+
+### Setup
+
+This experiment generalises the spike and refund scenarios to a *sequence* of
+random instantaneous demand events throughout the horizon.  Each Monte Carlo
+trial draws:
+
+- **n_events = 5** arrival times, sampled uniformly in `[0, 0.7·T]` and sorted.
+- Each event has a **random sign** (±, equal probability) and a **random size**
+  drawn from `Uniform(0, 8)` (up to 8% of Q per event).
+- Trials where the net withdrawal exceeds 40% of Q are resampled, keeping the
+  total budget disturbance moderate.
+
+The solve is split at every event time (6 segments per trial).  30 accepted
+trials are accumulated per controller per τ; the plot shows the mean trajectory
+± 1σ ribbon.
+
+Parameters: Q = 100, T = 10, τ ∈ {5%, 10%, 30%}·T.
+
+### Results (mean final-spent ± σ across 30 trials)
+
+| τ | Corr. denom | Smith | PID Pacer |
+|---|-------------|-------|-----------|
+| 5%·T  | 100.0 ± 0.0 | 100.0 ± 0.0 | 82.6 ± 5.2 |
+| 10%·T |  99.9 ± 0.1 | 100.0 ± 0.0 | 83.9 ± 5.7 |
+| 30%·T |  96.6 ± 2.5 | 100.0 ± 0.0 | 91.3 ± 5.7 |
+
+![Random demand events](demand_random.png)
+
+### Analysis
+
+**Smith predictor — zero variance at all delays.**  Every event is absorbed
+into `S(t)` the instant it occurs, so `B̂(t) = B(t)` exactly regardless of the
+number, sign, or timing of events.  The mean and standard deviation are both
+100.0 / 0.0 across all τ — random demand has no effect whatsoever on the Smith
+controller.
+
+**Corrected denominator — small mean error and low variance at small τ, growing
+spread at large τ.**  At τ = 5%·T each blind window is short (0.5 time units),
+so individual event errors are small and their random signs partially cancel
+across multiple events — mean = 100.0, σ = 0.0 (errors below rounding to 1
+decimal).  At τ = 10%·T rounding reveals a slight −0.1 bias; at τ = 30%·T the
+mean drops to 96.6 with σ = 2.5.  The variance arises because, unlike the
+deterministic single-spike experiments, the random signs of events create
+asymmetric blind-window errors that do not always cancel: a cluster of net
+withdrawals near the end of the event window leaves more uncompensated
+over-spend than a cluster of net refunds would save.
+
+**PIDPacer — large mean under-spend and significant variance.**  Each event
+generates a rate shock (positive for a withdrawal, negative for a refund) that
+lands in the finite-difference window after τ delay.  Positive shocks suppress
+the grant probability (under-spending episode); negative shocks boost it (brief
+over-pacing episode).  The suppression episodes are consistently stronger than
+the boost episodes because the sigmoid is asymmetric around the operating point:
+- The integral can only *accumulate* error over [0,T], and suppressions add to
+  it faster than boosts drain it at the conservative Ki=0.1.
+- The sigmoid saturates at 1 (can't spend faster than request_rate), but can go
+  all the way to 0, making suppressions able to halt spending entirely while
+  boosts can only double it.
+
+The net result is a structural under-delivery bias of ~17–8% depending on τ,
+with a standard deviation of ~5–6% driven by whether the random shocks arrive
+clustered or spread out.  The bias improves with τ (91% at 30% vs. 83% at 5%)
+for the same reason as in section 5c: longer delays give the slow integral more
+time to wind up before the deadline.
+
+### Comparison across spike experiments
+
+| Experiment | Smith | Corr. denom (τ=30%) | PIDPacer (τ=10%) |
+|------------|-------|---------------------|------------------|
+| No events (baseline) | 100.0 | 100.0 | 87.0 |
+| Single spike (5d) | 100.0 | 100.7 | 88.6 |
+| Two spikes (5e) | 100.0 | 105.6 | 95.1 |
+| Spike + refund (5f) | 100.0 |  95.8 | 85.7 |
+| Random 5 events (5g) | 100.0 |  96.6 ± 2.5 | 83.9 ± 5.7 |
+
+The Smith predictor row is flat at 100.0 across every scenario — it is the only
+controller with this property.  Corrected denominator accumulates errors
+proportional to the net uncompensated withdrawal during blind windows; its sign
+depends on whether the net is positive (over-spend) or negative (under-spend).
+PIDPacer systematically under-delivers in all spike/drop experiments; random
+events add variance on top of the baseline bias without meaningfully shifting
+the mean upward.
+
+### Try it yourself
+
+```julia
+# Default: 5 random events, Δ ≤ 8, τ = 5/10/30%·T, 30 Monte Carlo trials
+demo_demand_random()
+
+# More events, larger shocks
+demo_demand_random(n_events = 10, event_Δ_max = 15.0)
+
+# Fewer trials for a quick check
+demo_demand_random(n_samples = 10)
+```
+
+---
+
 ## References
 
 - [DDEProblem API](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/) — constructor signature, history function interface, `constant_lags` vs `dependent_lags`, neutral DDEs, and problem variants (`DynamicalDDEProblem`, `SecondOrderDDEProblem`)
