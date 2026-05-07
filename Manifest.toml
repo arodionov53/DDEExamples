@@ -247,7 +247,7 @@ uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.6.3"
 
 [[deps.DDEExamples]]
-deps = ["DelayDiffEq", "DifferentialEquations", "Plots"]
+deps = ["DelayDiffEq", "DifferentialEquations", "Plots", "Statistics"]
 path = "."
 uuid = "0227aef9-b346-4e8a-af79-d9b02786c483"
 version = "0.1.0"

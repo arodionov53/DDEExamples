@@ -587,13 +587,13 @@ DDE model of the production PIDPacer from pid_pacer.go.
 Faithfully reproduces the Go implementation:
   - Error signal is rate-based: e(t) = targetRate - observedRate(t-τ)
   - observedRate(t) = -dB/dt = spend rate inferred from delayed balance derivative
-  - PID output mapped through sigmoid: prob(t) = 1 / (1 + exp(-PID))
-  - Integral windup protection: integral clamped to ±max_integral/Ki
+  - PID output mapped linearly to probability: prob(t) = clamp(PID / (maxSpendRate * dt), 0, 1)
+  - Integral windup protection: integral clamped to ±max_integral
   - spend(t) = prob(t) * request_rate   (probabilistic grants)
 
 State: u = [B(t), I(t)] where I is the clamped integral of the rate error.
 
-Parameters match PIDConfig defaults: Kp=1.0, Ki=0.1, Kd=0.05.
+Parameters match PIDConfig defaults: Kp=1.0, Ki=0.3, Kd=0.05.
 `request_rate` is the average spend per second if all grants are accepted.
 """
 function solve_budget_pid_pacer(;
@@ -601,9 +601,9 @@ function solve_budget_pid_pacer(;
     T            = 10.0,
     τ            = 1.0,
     Kp           = 1.0,
-    Ki           = 0.1,
+    Ki           = 0.3,
     Kd           = 0.05,
-    max_integral = 10.0 / 0.1,   # mirrors Go: 10.0 / Ki
+    max_integral = 10.0 / 0.3,   # mirrors Go: 10.0 / Ki
     request_rate = Q / T,         # average grant size if prob=1
     tspan        = (0.0, T - 1e-3)
 )
@@ -630,10 +630,9 @@ function solve_budget_pid_pacer(;
         e_prev = target_rate - observed_rate_prev
         de = (e - e_prev) / dt_obs
 
-        # PID output → sigmoid probability (mirrors Go)
+        # PID output → probability via linear scaling (mirrors Go: CV / (maxSpendRate * dt))
         pid_out = Kp * e + Ki * I_new + Kd * de
-        prob    = 1.0 / (1.0 + exp(-pid_out))
-        prob    = clamp(prob, 0.0, 1.0)
+        prob    = clamp(pid_out / (request_rate * dt_obs), 0.0, 1.0)
 
         # Spend rate = probability × request_rate
         du[1] = -prob * request_rate
@@ -663,7 +662,7 @@ function demo_pid_pacer(;
     delays       = [0.05, 0.1, 0.3] .* T,
     tau_noise    = 0.0,
     n_samples    = 30,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts           = range(0.0, T - 1e-3; length = 500)
     ideal_spent  = Q .* ts ./ T
@@ -725,7 +724,7 @@ function demo_pid_pacer_noise(;
     delays       = [0.05, 0.1, 0.3] .* T,
     noise_levels = [0.0, 0.10, 0.30],
     n_samples    = 40,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts          = range(0.0, T - 1e-3; length = 500)
     ideal_spent = Q .* ts ./ T
@@ -928,8 +927,8 @@ PIDPacer controller with a short demand spike injected at `t_spike`.
 """
 function solve_budget_pid_pacer_spike(;
     Q = 100.0, T = 10.0, τ = 1.0,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05,
-    max_integral = 10.0 / 0.1,
+    Kp = 1.0, Ki = 0.3, Kd = 0.05,
+    max_integral = 10.0 / 0.3,
     request_rate = Q / T,
     t_spike = 2.0, spike_Δ = 10.0
 )
@@ -961,8 +960,7 @@ function solve_budget_pid_pacer_spike(;
         de = (e - e_prev) / dt_obs
 
         pid_out = _Kp * e + _Ki * I_new + _Kd * de
-        prob    = 1.0 / (1.0 + exp(-pid_out))
-        prob    = clamp(prob, 0.0, 1.0)
+        prob    = clamp(pid_out / (_request_rate * dt_obs), 0.0, 1.0)
 
         du[1] = -prob * _request_rate
         du[2] = e
@@ -990,7 +988,7 @@ function demo_demand_spike(;
     delay_fracs  = [0.05, 0.10, 0.30],
     t_spike_frac = 0.2,
     spike_Δ      = 10.0,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts      = range(0.0, T - 1e-3; length = 500)
     t_spike = t_spike_frac * T
@@ -1133,8 +1131,8 @@ PIDPacer controller with two short demand spikes.
 """
 function solve_budget_pid_pacer_two_spikes(;
     Q = 100.0, T = 10.0, τ = 1.0,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05,
-    max_integral = 10.0 / 0.1,
+    Kp = 1.0, Ki = 0.3, Kd = 0.05,
+    max_integral = 10.0 / 0.3,
     request_rate = Q / T,
     t_spike1 = 2.0, spike_Δ1 = 10.0,
     t_spike2 = 5.0, spike_Δ2 = 10.0
@@ -1154,7 +1152,7 @@ function solve_budget_pid_pacer_two_spikes(;
         I_new  = clamp(u[2] + e, -_max_integral, _max_integral)
         de     = (e - e_prev) / dt_obs
         pid_out = _Kp * e + _Ki * I_new + _Kd * de
-        prob    = clamp(1.0 / (1.0 + exp(-pid_out)), 0.0, 1.0)
+        prob    = clamp(pid_out / (_request_rate * dt_obs), 0.0, 1.0)
         du[1]   = -prob * _request_rate
         du[2]   = e
     end
@@ -1202,7 +1200,7 @@ function demo_demand_two_spikes(;
     spike_Δ1       = 10.0,
     t_spike2_frac  = 0.5,
     spike_Δ2       = 10.0,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts      = range(0.0, T - 1e-3; length = 500)
     t_spike1 = t_spike1_frac * T
@@ -1287,7 +1285,7 @@ function demo_demand_spike_then_drop(;
     spike_Δ       = 10.0,
     t_drop_frac   = 0.5,
     drop_Δ        = 10.0,    # positive value → budget refunded
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts      = range(0.0, T - 1e-3; length = 500)
     t_spike = t_spike_frac * T
@@ -1438,7 +1436,7 @@ function _solve_random_demand_smith(; Q, T, τ, t_events, Δ_events)
 end
 
 function _solve_random_demand_pid_pacer(; Q, T, τ, t_events, Δ_events,
-    Kp=1.0, Ki=0.1, Kd=0.05, max_integral=10.0/0.1, request_rate=Q/T)
+    Kp=1.0, Ki=0.3, Kd=0.05, max_integral=10.0/0.3, request_rate=Q/T)
     target_rate = Q / T
     function dyn!(du, u, h, p, t)
         _Q, _T, _τ, _Kp, _Ki, _Kd, _max_integral, _target_rate, _request_rate = p
@@ -1453,7 +1451,7 @@ function _solve_random_demand_pid_pacer(; Q, T, τ, t_events, Δ_events,
         I_new  = clamp(u[2] + e, -_max_integral, _max_integral)
         de     = (e - e_prev) / dt_obs
         pid_out = _Kp * e + _Ki * I_new + _Kd * de
-        prob    = clamp(1.0 / (1.0 + exp(-pid_out)), 0.0, 1.0)
+        prob    = clamp(pid_out / (_request_rate * dt_obs), 0.0, 1.0)
         du[1] = -prob * _request_rate
         du[2] = e
     end
@@ -1527,7 +1525,7 @@ function demo_demand_random(;
     n_events     = 5,
     event_Δ_max  = 8.0,
     n_samples    = 30,
-    Kp = 1.0, Ki = 0.1, Kd = 0.05
+    Kp = 1.0, Ki = 0.3, Kd = 0.05
 )
     ts = range(0.0, T - 1e-3; length = 500)
 
