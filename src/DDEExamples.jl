@@ -15,6 +15,7 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        solve_budget_pid_pacer_spike, demo_demand_spike,
        solve_budget_corrected_denom_two_spikes, solve_budget_smith_two_spikes,
        solve_budget_pid_pacer_two_spikes, demo_demand_two_spikes,
+       demo_demand_spike_then_drop,
        demo, demo_zero_delay
 
 """
@@ -1259,6 +1260,96 @@ function demo_demand_two_spikes(;
                plot_title="Two demand spikes (Δ1=$(spike_Δ1), Δ2=$(spike_Δ2), d<τ)  Q=$(Q), T=$(T)")
     savefig(fig, "demand_two_spikes.png")
     println("Plot saved to demand_two_spikes.png")
+    fig
+end
+
+"""
+    demo_demand_spike_then_drop(; Q, T, delay_fracs, t_spike_frac, spike_Δ, t_drop_frac, drop_Δ)
+
+Like `demo_demand_two_spikes` but the second event is a sudden budget *refund*
+(drop in demand) of size `drop_Δ` — modelled as a negative spike, i.e. `B`
+increases by `drop_Δ` instantaneously at `t_drop`.
+
+This tests whether controllers can exploit a windfall: level-based controllers
+(Smith, corrected denom) should slow spending immediately; the rate-based
+PIDPacer will mis-read the refund as a sudden deceleration and *increase*
+grant probability, potentially over-spending.
+
+Grid layout: rows = τ values (expressed as % of T), columns = controllers.
+Saves `demand_spike_then_drop.png`.
+"""
+function demo_demand_spike_then_drop(;
+    Q             = 100.0,
+    T             = 10.0,
+    delay_fracs   = [0.05, 0.10, 0.30],
+    t_spike_frac  = 0.2,
+    spike_Δ       = 10.0,
+    t_drop_frac   = 0.5,
+    drop_Δ        = 10.0,    # positive value → budget refunded
+    Kp = 1.0, Ki = 0.1, Kd = 0.05
+)
+    ts      = range(0.0, T - 1e-3; length = 500)
+    t_spike = t_spike_frac * T
+    t_drop  = t_drop_frac  * T
+
+    function stitch3(s1, s2, s3, ts1, ts2)
+        map(t -> t < ts1 ? s1(t; idxs=1) :
+                 t < ts2 ? s2(t; idxs=1) :
+                           s3(t; idxs=1), ts)
+    end
+
+    function make_plot(controller, τ, B_vec)
+        τ_pct = round(Int, 100 * τ / T)
+        spent = Q .- B_vec
+        p = plot(ts, Q .* ts ./ T;
+            label="ideal", linewidth=2, linestyle=:dash, color=:black,
+            xlabel="time", ylabel="spent",
+            title="$(controller)  τ=$(τ_pct)%·T",
+            legend=:topleft)
+        hline!(p, [Q]; label="cap", linewidth=1, linestyle=:dot, color=:grey)
+        vline!(p, [t_spike];        label="spike (−$(spike_Δ))",  linewidth=1, linestyle=:dashdot, color=:red)
+        vline!(p, [t_spike + τ];    label="spike vis. t+τ",       linewidth=1, linestyle=:dot,     color=:orange)
+        vline!(p, [t_drop];         label="drop (+$(drop_Δ))",    linewidth=1, linestyle=:dashdot, color=:darkgreen)
+        vline!(p, [t_drop + τ];     label="drop vis. t+τ",        linewidth=1, linestyle=:dot,     color=:green)
+        plot!(p, ts, spent; linewidth=2, color=:blue,
+              label="spent ($(round(spent[end]; digits=1)))")
+        p
+    end
+
+    # Reuse two-spike solvers: spike_Δ1 = +spike (budget down),
+    # spike_Δ2 = -drop_Δ (budget up, refund).
+    strategies = [
+        ("Corr. denom", (τ) -> begin
+            s1,s2,s3,ts1,ts2 = solve_budget_corrected_denom_two_spikes(;
+                Q, T, τ, t_spike1=t_spike, spike_Δ1=spike_Δ,
+                         t_spike2=t_drop,  spike_Δ2=-drop_Δ)
+            stitch3(s1, s2, s3, ts1, ts2)
+        end),
+        ("Smith",       (τ) -> begin
+            s1,s2,s3,ts1,ts2 = solve_budget_smith_two_spikes(;
+                Q, T, τ, t_spike1=t_spike, spike_Δ1=spike_Δ,
+                         t_spike2=t_drop,  spike_Δ2=-drop_Δ)
+            stitch3(s1, s2, s3, ts1, ts2)
+        end),
+        ("PID Pacer",   (τ) -> begin
+            s1,s2,s3,ts1,ts2 = solve_budget_pid_pacer_two_spikes(;
+                Q, T, τ, t_spike1=t_spike, spike_Δ1=spike_Δ,
+                         t_spike2=t_drop,  spike_Δ2=-drop_Δ, Kp, Ki, Kd)
+            stitch3(s1, s2, s3, ts1, ts2)
+        end),
+    ]
+
+    plts = [make_plot(name, frac * T, solver(frac * T))
+            for frac in delay_fracs
+            for (name, solver) in strategies]
+
+    ncols = length(strategies)
+    nrows = length(delay_fracs)
+    fig = plot(plts...; layout=(nrows, ncols),
+               size=(380 * ncols, 360 * nrows),
+               plot_title="Spike then refund (spike −$(spike_Δ) @ $(t_spike_frac)T, drop +$(drop_Δ) @ $(t_drop_frac)T)  Q=$(Q), T=$(T)")
+    savefig(fig, "demand_spike_then_drop.png")
+    println("Plot saved to demand_spike_then_drop.png")
     fig
 end
 

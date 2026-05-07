@@ -1030,6 +1030,109 @@ s1, s2, _ = solve_budget_smith_spike(Q=100.0, T=10.0, τ=1.0, t_spike=2.0, spike
 
 ---
 
+## 5f. Demand Spike Followed by a Sudden Drop (Budget Refund)
+
+### Setup
+
+This experiment extends 5e with an asymmetric pair of events:
+
+1. **Spike at t = 0.2·T** — instantaneous budget withdrawal of Δ = 10 (demand
+   burst, same as before).
+2. **Drop at t = 0.5·T** — instantaneous budget *refund* of 10 (demand
+   cancellation, a freed reservation, etc.).  Budget increases by 10 at t_drop.
+
+Both events have duration zero (less than τ), so neither is visible in the
+delayed observation until τ time units after it occurs.  The interesting
+question is the *asymmetry*: how does each controller react to a windfall
+compared to a loss?
+
+The drop is implemented by passing `spike_Δ2 = -drop_Δ` to the existing
+two-spike solvers — a negative spike is a budget increase.
+
+Parameters: Q = 100, T = 10, τ ∈ {5%, 10%, 30%}·T.
+
+### Results
+
+| τ | Corr. denom spent | Smith spent | PID Pacer spent |
+|---|-------------------|-------------|-----------------|
+| 5%·T  | 100.0 | 100.0 | 83.6 |
+| 10%·T | 100.0 | 100.0 | 85.7 |
+| 30%·T |  95.8 | 100.0 | 88.6 |
+
+![Spike then refund experiment](demand_spike_then_drop.png)
+
+### Analysis
+
+**Smith predictor — perfect at all delays.**  The spike lowers `S(t)` by Δ and
+the drop raises it by `drop_Δ`; the reconstruction `B̂(t) = B(t-τ) - (S(t) -
+S(t-τ))` tracks both changes instantly.  The two events cancel exactly (same
+magnitude), so the Smith controller finishes at 100.0% for all τ — as if
+neither event had occurred.
+
+**Corrected denominator — under-spends at large τ.**  The behaviour is the
+reverse of the two-spike case.  The spike during its blind window causes
+over-spending (as before).  But the refund during its own blind window causes
+*under-spending*: the controller continues spending at a rate calibrated to the
+pre-refund balance, which is now lower than the true (refunded) balance.  The
+two errors partially cancel, but the cancellation is imperfect because the
+blind windows occur at different times — the denominator `(T - t + τ)` is
+smaller at the later drop event, so the correction applied after the drop's
+blind window is weaker.  Net result: at τ = 30%·T the controller under-spends
+(95.8%), the refund's under-correction outweighs the spike's over-correction.
+At τ = 5–10%·T both blind windows are short enough that the errors are
+negligible (100.0%).
+
+**PIDPacer — under-delivers, with both events reinforcing each other.**  The
+spike at t_spike appears as a positive rate shock τ later (as in 5d), driving
+down grant probability.  The refund at t_drop appears as a *negative* rate
+shock τ later — the delayed balance suddenly jumps up, making the finite-
+difference rate look artificially negative (i.e. the controller thinks it has
+been under-spending).  The PID responds by *increasing* grant probability.
+However, because the integral has already been suppressed by the spike episode,
+the increased probability only partially compensates.  The net effect is still
+an under-spend: 83.6%–88.6% across all τ.
+
+Compared to the two-spike experiment (96.3%–99.8%), the refund scenario
+produces *worse* utilisation.  The reason: in the two-spike case the second
+spike adds a second suppression episode that the integral eventually fights
+off; in the refund case the second event boosts probability just as the
+integral was recovering — the boost arrives too early (before the integral
+momentum builds), so the controller over-corrects briefly, then drifts below
+target again before the horizon ends.
+
+### Key insight: asymmetric response to symmetric events
+
+The spike and drop have equal magnitude but opposite effects on budget.
+Ideally they cancel and the controller should finish at 100%.  In practice:
+
+- **Smith**: cancellation is exact — both events are absorbed into `S(t)`
+  immediately.
+- **Corrected denom**: near-exact at small τ; the cancellation degrades as τ
+  grows because the effective denominator differs between the two blind windows.
+- **PIDPacer**: the two rate shocks arrive sequentially and interact with the
+  integral state, producing a non-linear residual that is worse than either
+  event alone.
+
+This asymmetry has a practical implication: if a production system receives a
+budget refund (released reservation, cancelled campaign) partway through a
+period, a rate-based PID controller will *not* recover the utilisation the
+refund is intended to restore.  A level-based controller (Smith predictor) will.
+
+### Try it yourself
+
+```julia
+# Default: spike at 20%·T, refund at 50%·T, grid over τ = 5/10/30%
+demo_demand_spike_then_drop()
+
+# Larger refund than spike — should Smith finish above 100%? (no: B̂ is clamped by T-t)
+demo_demand_spike_then_drop(spike_Δ = 10.0, drop_Δ = 20.0)
+
+# Refund arrives before spike blind window closes (overlapping windows)
+demo_demand_spike_then_drop(t_spike_frac = 0.2, t_drop_frac = 0.25)
+```
+
+---
+
 ## References
 
 - [DDEProblem API](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/) — constructor signature, history function interface, `constant_lags` vs `dependent_lags`, neutral DDEs, and problem variants (`DynamicalDDEProblem`, `SecondOrderDDEProblem`)
