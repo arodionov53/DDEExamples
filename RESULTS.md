@@ -861,6 +861,175 @@ sim.u[1].prob.p[3]  # the delay τ used in that trajectory
 
 ---
 
+## 5d. Demand Spike Shorter Than τ
+
+### Setup
+
+A demand spike is an instantaneous budget withdrawal of size Δ at time `t_spike`
+that is external to the pacing loop — e.g. a sudden burst of high-priority spend
+forced through a separate path.  Because the spike duration is zero (much less
+than τ), the delayed observation `B(t-τ)` does not reflect the withdrawal until
+`t ≥ t_spike + τ`.  Each controller is therefore blind to the event for a window
+of length τ immediately after it occurs.
+
+The experiment uses `Q = 100`, `T = 10`, `Δ = 10` (10% of budget), spike at
+`t_spike = 0.2·T = 2`.  Three delay values are tested: τ = 5%, 10%, 30% of T.
+
+Numerically, the solve is split at `t_spike`: segment 1 runs `[0, t_spike)` with
+the standard dynamics; segment 2 restarts from `B(t_spike) - Δ` with a history
+function that replays segment 1, so the delayed terms see the pre-spike trajectory
+until the blind window closes at `t_spike + τ`.
+
+### Results
+
+| τ | Corr. denom spent | Smith spent | PID Pacer spent |
+|---|-------------------|-------------|-----------------|
+| 5%·T  | 100.0 | 100.0 | 80.9 |
+| 10%·T | 100.0 | 100.0 | 88.6 |
+| 30%·T | 100.7 | 100.0 | 96.3 |
+
+![Demand spike experiment](demand_spike.png)
+
+### Analysis
+
+**Smith predictor — perfect recovery at all delays.**  The Smith predictor tracks
+cumulative spend `S(t)` in a second state variable and reconstructs the true
+current balance as `B̂(t) = B(t-τ) - (S(t) - S(t-τ))`.  The spike is absorbed
+into `S(t)` the instant it happens, so `B̂(t)` immediately reflects the lower
+balance regardless of τ.  The blind window has no effect on the control law.
+
+**Corrected denominator — recovers, with a small overshoot at large τ.**  The
+corrected-denom controller does not track the spike directly: it continues
+spending based on the stale (pre-spike) observation for the duration of the blind
+window.  During that window it slightly over-spends relative to the new, lower
+balance.  Once the observation catches up at `t_spike + τ` the spend rate drops
+to compensate.  At τ = 5–10%·T the compensation is exact (100.0%); at τ = 30%·T
+the late correction is insufficient and the controller ends 0.7% over (100.7%).
+The overshoot grows with τ because the blind window is longer and more
+over-spending accumulates before the observation catches up.
+
+**PIDPacer — significant under-spend, worsening at small τ.**  The PIDPacer
+measures the *rate* `(B(t-τ) - B(t-2τ)) / τ` rather than the level.  During the
+blind window the rate signal is unaffected by the spike (both `B(t-τ)` and
+`B(t-2τ)` are pre-spike values, so their difference is unchanged).  The spike
+becomes visible only when the first affected sample enters the τ-ago window —
+and then it appears as a *large positive rate* (a sudden drop in the delayed
+balance), causing the PID to interpret the spike as over-spending and *reduce*
+the grant probability.  The sigmoid clamps the response, but the integral
+accumulates the suppression.  The net effect is that the PIDPacer under-delivers
+after a spike: 80.9% at τ = 5%·T, improving to 96.3% at τ = 30%·T (the longer
+blind window softens the apparent rate shock).  This is the inverse of the
+rate-controller's usual failure mode — a demand spike is mis-read as a pace
+increase, not a pace decrease.
+
+---
+
+## 5e. Two Demand Spikes Shorter Than τ
+
+### Setup
+
+Two successive instantaneous spikes of equal size Δ = 10 are injected at
+`t_spike1 = 0.2·T` and `t_spike2 = 0.5·T`.  The gap between spikes (0.3·T)
+exceeds τ at 5% and 10% — so the second spike arrives after the first blind
+window has closed — but is shorter than τ at 30%·T (0.3·T < 0.3·T is
+borderline; a stricter overlapping test uses `t_spike2 = t_spike1 + 0.5·τ`).
+
+The solve is split at both spike times: three segments, each restarting with the
+new state and a history function that replays all prior segments.
+
+### Results — spaced spikes (t1 = 0.2·T, t2 = 0.5·T)
+
+| τ | Corr. denom | Smith | PID Pacer |
+|---|-------------|-------|-----------|
+| 5%·T  | 100.0 | 100.0 | 96.3 |
+| 10%·T | 100.0 | 100.0 | 95.1 |
+| 30%·T | 105.6 | 100.0 | 99.8 |
+
+### Results — overlapping blind windows (t2 = t1 + 0.5·τ, second spike inside first blind window)
+
+| τ | t_spike2 | Corr. denom | Smith | PID Pacer |
+|---|----------|-------------|-------|-----------|
+| 5%·T  | 2.25 | 100.0 | 100.0 | 96.6 |
+| 10%·T | 2.50 | 100.0 | 100.0 | 98.0 |
+| 30%·T | 3.50 | 103.1 | 100.0 | 92.5 |
+
+![Two demand spikes experiment](demand_two_spikes.png)
+
+### Analysis
+
+**Smith predictor — still perfect.**  Each spike is absorbed into `S(t)` the
+moment it occurs.  Two spikes are no harder than one: the cumulative-spend
+reconstruction `B̂(t) = B(t-τ) - (S(t) - S(t-τ))` accounts for all spending
+regardless of how many discrete events contributed to it.
+
+**Corrected denominator — overshoot compounds with two spikes and with τ.**  With
+spaced spikes at τ = 5–10%·T the controller recovers fully from each spike
+individually (100.0%).  At τ = 30%·T the two blind windows each contribute an
+over-spend that adds together: 105.6% with spaced spikes vs. 100.7% with one
+spike — roughly doubling the excess.  With overlapping blind windows at τ = 30%·T
+the two spikes merge into one longer period of stale observation, producing a
+somewhat smaller 103.1% overshoot because the second blind window partially
+overlaps the first rather than being fully independent.
+
+**PIDPacer — under-spend is non-additive and depends on spike timing.**  With
+spaced spikes the under-delivery is 96.3% (τ=5%) and 95.1% (τ=10%), worse than
+the single-spike 80.9% / 88.6% — the second spike triggers a second suppression
+episode before the integral from the first has fully recovered.  Paradoxically,
+at τ = 30%·T the two spaced spikes produce 99.8% (better than the single-spike
+96.3%) because by `t_spike2 = 0.5·T` the slow integral has already wound up
+enough to push spend close to target, and the second spike's rate signal is
+attenuated by the already-elevated probability.
+
+With overlapping blind windows at τ = 30%·T the PIDPacer reaches only 92.5%.
+Both spikes fall inside the same blind window (`t2 = 3.5 < t1 + τ = 5`), so
+their combined Δ = 20 appears as a single large positive-rate shock when the
+observation catches up, driving a prolonged suppression of the grant probability.
+
+### Key comparative insight
+
+The experiments expose a fundamental asymmetry between rate-based and
+level-based controllers under instantaneous demand events:
+
+- **Level-based** controllers (Smith, corrected denom) see the spike as a step
+  change in the balance.  The Smith predictor accounts for it immediately;
+  corrected denom accumulates a small error during the blind window.
+- **Rate-based** controllers (PIDPacer) see the spike as a transient in the
+  finite-difference rate signal.  The spike looks like a brief acceleration of
+  spending, which the PID interprets as over-pacing and responds to by *reducing*
+  grants — the opposite of the correct response.  Two spikes in short succession
+  can compound or partially cancel depending on how their rate signals overlap
+  in the delayed observation window.
+
+In production, external demand spikes that bypass the pacing loop (e.g.
+forced-serve events, priority overrides) will therefore cause the PIDPacer to
+*under-deliver* for at least τ time units after each event.  The corrected-denom
+controller is immune to rate-signal inversion but accumulates a proportional
+over-spend during the blind window.  The Smith predictor is the only controller
+that responds correctly to both the level change and the rate signal because it
+reconstructs the true current balance rather than working from delayed
+observations.
+
+### Try it yourself
+
+```julia
+# Single spike: grid over τ = 5%, 10%, 30%·T
+demo_demand_spike()
+
+# Custom spike size and timing
+demo_demand_spike(spike_Δ = 20.0, t_spike_frac = 0.3)
+
+# Two spikes: default spacing (t1=0.2T, t2=0.5T)
+demo_demand_two_spikes()
+
+# Overlapping blind windows: second spike inside first blind window
+demo_demand_two_spikes(t_spike1_frac = 0.2, t_spike2_frac = 0.25)
+
+# Solve a single spike scenario directly
+s1, s2, _ = solve_budget_smith_spike(Q=100.0, T=10.0, τ=1.0, t_spike=2.0, spike_Δ=15.0)
+```
+
+---
+
 ## References
 
 - [DDEProblem API](https://docs.sciml.ai/DiffEqDocs/stable/types/dde_types/) — constructor signature, history function interface, `constant_lags` vs `dependent_lags`, neutral DDEs, and problem variants (`DynamicalDDEProblem`, `SecondOrderDDEProblem`)
