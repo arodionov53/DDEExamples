@@ -1,6 +1,6 @@
 # DDEExamples — Budget Spending with Information Delay
 
-Results for the budget-pacing DDE examples (sections 5–5g).
+Results for the budget-pacing DDE examples.
 For the classical DDE examples (Mackey-Glass, logistic, two-delay) see [RESULTS.md](RESULTS.md).
 
 ---
