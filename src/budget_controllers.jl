@@ -35,6 +35,29 @@ function solve_budget_delay(;
 end
 
 """
+    solve_budget_nodelay(; Q, T)
+
+Ideal budget spending with zero delay (ODE): dB/dt = -B(t) / (T - t).
+
+When τ = 0 the delayed balance B(t-τ) equals B(t) and the DDE reduces to
+this separable ODE with exact solution B(t) = Q·(1 - t/T) — perfect linear
+drawdown that reaches zero exactly at the deadline.
+"""
+function solve_budget_nodelay(;
+    Q = 100.0, T = 10.0,
+    tspan = (0.0, T - 1e-3)
+)
+    function budget_ode!(du, u, p, t)
+        Q, T = p
+        du[1] = -u[1] / (T - t)
+    end
+
+    p = (Q, T)
+    prob = ODEProblem(budget_ode!, [Q], tspan, p)
+    solve(prob, Tsit5())
+end
+
+"""
     solve_budget_corrected_denom(; Q, T, τ)
 
 Corrected-denominator controller: divide by (T - t + τ) instead of (T - t).

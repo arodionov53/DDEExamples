@@ -90,6 +90,20 @@ for the first τ time units of the horizon (0 ≤ t ≤ τ), which correctly
 models the controller waking up at t = 0 with a full budget and τ-stale
 observations that show only the pre-horizon state.
 
+**Zero-delay (ODE) example.**
+
+Setting τ = 0 recovers the ideal ODE `dB/dt = -B(t)/(T-t)`.  `solve_budget_nodelay`
+solves this directly without a DDE solver and serves as a reference baseline:
+
+```julia
+sol0 = solve_budget_nodelay(Q = 100.0, T = 10.0)
+# sol0.(range(0, 9.999; length=5); idxs=1)  ≈  [100, 75, 50, 25, 0]
+```
+
+The solution is the straight line B(t) = Q·(1 - t/T), verified by the exact
+integral computed in Step 1 above.  Any DDE controller with τ > 0 should be
+compared against this ideal to quantify the cost of the information delay.
+
 ### Analytical zero-delay limit
 
 With τ = 0 the equation becomes:
@@ -183,6 +197,9 @@ Three subplots, one per delay (5%, 10%, 50% of T).  Each shows:
 ### Try it yourself
 
 ```julia
+# Zero-delay ideal (ODE) — perfect linear drawdown, B(T) = 0
+solve_budget_nodelay()
+
 # Naive controller — observe the overspend grow with τ
 solve_budget_delay(τ = 0.1)
 solve_budget_delay(τ = 5.0)
