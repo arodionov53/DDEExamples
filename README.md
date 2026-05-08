@@ -5,7 +5,7 @@ A Julia package with worked examples of **Delay Differential Equations (DDEs)** 
 Each example pairs a real-world motivation with a runnable solver function and a comparison against the zero-delay (ODE) limit.  Detailed results and explanations are in:
 
 - [RESULTS.md](RESULTS.md) — classical DDEs (Mackey-Glass, logistic, two-delay, zero-delay comparison)
-- [RESULTS_BUDGET.md](RESULTS_BUDGET.md) — budget-pacing controllers (sections 5–5g: naive, corrected denom, Smith, PID, PIDPacer, demand spikes, random events)
+- [RESULTS_BUDGET.md](RESULTS_BUDGET.md) — budget-pacing controllers: naive, corrected denom, Smith, PID, PIDPacer, IMC, MPC, demand spikes, random events
 
 ## Examples
 
@@ -24,7 +24,7 @@ Example 5 includes four controllers of increasing sophistication:
 - **Smith predictor** — reconstructs the true current balance from the delayed observation and cumulative spend history; achieves near-perfect pacing at any delay
 - **PID** — tracks the reference trajectory `B_ref(t) = Q(1-t/T)` via a delayed error signal with integral and derivative terms
 
-### Production PIDPacer (section 5c)
+### Production PIDPacer
 
 `solve_budget_pid_pacer` / `demo_pid_pacer` model the production Go implementation faithfully:
 - Rate-based error signal: `e(t) = targetRate − observedRate(t−τ)`
@@ -32,7 +32,7 @@ Example 5 includes four controllers of increasing sophistication:
 - PID output mapped through a sigmoid to a grant probability
 - Integral windup protection via clamping
 
-### Noise sensitivity (sections 5b, 5c)
+### Noise sensitivity
 
 `demo_budget_delay_with_noise` and `demo_pid_pacer_noise` compare all strategies across multiple τ noise levels (mean ± 1σ ribbons):
 
@@ -44,7 +44,7 @@ Example 5 includes four controllers of increasing sophistication:
 | Corrected denom | 100% | 95% (under-spends) | Bias dominates, noise negligible |
 | Smith predictor | 100% | 100% | Immune — all curves overlap |
 
-### Demand spikes (sections 5d–5g)
+### Demand spikes
 
 Each controller is also stress-tested against instantaneous demand events — budget discontinuities with duration < τ, so the controller is blind to them for a full delay window.
 
