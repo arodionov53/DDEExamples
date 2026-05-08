@@ -5,7 +5,7 @@ For the classical DDE examples (Mackey-Glass, logistic, two-delay) see [RESULTS.
 
 ---
 
-## 5. Budget Spending with Information Delay
+## Budget Spending with Information Delay
 
 ### Equation
 
@@ -158,7 +158,7 @@ sol = solve_budget_pid(Q = 100.0, T = 10.0, τ = 1.0, Kp = 1.0, Ki = 0.5, Kd = 0
 
 ---
 
-## 5b. Controller Comparison: PID vs Smith Predictor vs Corrected Denominator
+## Controller Comparison: PID vs Smith Predictor vs Corrected Denominator
 
 ### Motivation
 
@@ -296,7 +296,7 @@ small noise into large instability.
 
 ---
 
-## 5c. Production PIDPacer DDE Model
+## Production PIDPacer DDE Model
 
 ### Background
 
@@ -427,7 +427,7 @@ demo_pid_pacer(tau_noise = 0.15, n_samples = 40)
 
 ---
 
-## 5d. Demand Spike Shorter Than τ
+## Demand Spike Shorter Than τ
 
 ### Setup
 
@@ -490,7 +490,7 @@ increase, not a pace decrease.
 
 ---
 
-## 5e. Two Demand Spikes Shorter Than τ
+## Two Demand Spikes Shorter Than τ
 
 ### Setup
 
@@ -596,7 +596,7 @@ s1, s2, _ = solve_budget_smith_spike(Q=100.0, T=10.0, τ=1.0, t_spike=2.0, spike
 
 ---
 
-## 5f. Demand Spike Followed by a Sudden Drop (Budget Refund)
+## Demand Spike Followed by a Sudden Drop (Budget Refund)
 
 ### Setup
 
@@ -699,7 +699,7 @@ demo_demand_spike_then_drop(t_spike_frac = 0.2, t_drop_frac = 0.25)
 
 ---
 
-## 5g. Random Demand Events
+## Random Demand Events
 
 ### Setup
 
