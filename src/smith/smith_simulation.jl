@@ -1,16 +1,16 @@
-# Discrete-time PID budget pacing simulation
-# Faithful port of the Go simulation at pacing-oracle/pkg/pacing/simulation/
+# Discrete-time Smith predictor budget pacing simulation
+# Adapts the PID simulation framework to use a Smith predictor controller
 
-include("pid_pacer.jl")
-include("pid_simulation_use_cases.jl")
+include("smith_pacer.jl")
+include("smith_simulation_use_cases.jl")
 
 # ── Main Entry Points ────────────────────────────────────────────────────────
 
-function run_single_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::Bool=false)
+function run_single_smith_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::Bool=false, τ::Float64=5.0)
     # Initialize
     tick_with!(uc, 0.0)
 
-    pacer = PIDPacer(uc.state.current_time)
+    pacer = SmithPacer(uc.state.current_time; τ)
 
     iterations = 0
     hard_violations = 0
@@ -20,16 +20,13 @@ function run_single_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::B
     while should_tick(uc, iterations)
         iterations += 1
 
-        # Target spent: linear over campaign duration
-        target_spent = Float64(uc.metadata.total_budget) * elapsed_duration_percent(uc)
-
-        # Build PID input and calculate
-        result = calculate_cruise_mode!(pacer;
+        # Build Smith predictor input and calculate
+        result = calculate_smith_mode!(pacer;
             current_time = uc.state.current_time,
             start_time = uc.metadata.start_time,
             end_time = uc.metadata.end_time,
-            target_spent = target_spent / Float64(MICRODOLLAR),
-            total_exposure = Float64(total_spent_exposure_rate(uc)) / Float64(MICRODOLLAR),
+            total_budget = Float64(uc.metadata.total_budget) / Float64(MICRODOLLAR),
+            current_spent = Float64(total_spent_exposure_rate(uc)) / Float64(MICRODOLLAR),
             max_spend_rate = Float64(eligible_spend_budget_rate(uc)) / Float64(MICRODOLLAR) * uc.state.win_percent,
         )
 
@@ -69,14 +66,15 @@ function run_single_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::B
 
     # Generate plot
     if plot && !isempty(plot_data)
-        plot_simulation(uc.name, plot_data, uc.metadata.start_time, uc.metadata.end_time)
+        plot_simulation(uc.name, plot_data, uc.metadata.start_time, uc.metadata.end_time;
+            output_dir="src/smith/plots")
     end
 
     return (hard_violations, soft_violations, iterations)
 end
 
-function run_pid_simulation(; scenario::Union{Nothing,String}=nothing, plot::Bool=true, verbose::Bool=false)
-    use_cases = create_default_pid_pacer_simulation_use_cases()
+function run_smith_simulation(; scenario::Union{Nothing,String}=nothing, plot::Bool=true, verbose::Bool=false, τ::Float64=5.0)
+    use_cases = create_default_smith_simulation_use_cases()
 
     if !isnothing(scenario)
         idx = findfirst(uc -> uc.name == scenario, use_cases)
@@ -88,7 +86,7 @@ function run_pid_simulation(; scenario::Union{Nothing,String}=nothing, plot::Boo
 
     for (i, uc) in enumerate(use_cases)
         verbose && println("Running scenario $i/$(length(use_cases)): $(uc.name)")
-        hv, sv, iters = run_single_scenario!(uc; plot, verbose)
+        hv, sv, iters = run_single_smith_scenario!(uc; plot, verbose, τ)
         results[uc.name] = (hard_violations=hv, soft_violations=sv, iterations=iters)
     end
 

@@ -5,7 +5,21 @@ using DifferentialEquations: Tsit5, ODEProblem
 using Plots
 using Statistics: mean, std
 
+# ── Shared simulation infrastructure ─────────────────────────────────────────
+
+const MICRODOLLAR = Int64(1_000_000)
+const MICROCENT = MICRODOLLAR ÷ 100
+const MICROMILLI = Int64(1000)
+
+include("simulation/pending_queues.jl")
+include("simulation/simulation.jl")
+include("simulation/generators.jl")
+include("simulation/plot_simulation.jl")
+
+# ── Controller-specific simulations ─────────────────────────────────────────
+
 include("pid/pid_simulation.jl")
+include("smith/smith_simulation.jl")
 
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
@@ -23,6 +37,9 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        run_pid_simulation, run_single_scenario!,
        create_default_pid_pacer_simulation_use_cases,
        PIDPacer, PIDConfig, PIDResult, calculate_cruise_mode!,
+       run_smith_simulation, run_single_smith_scenario!,
+       create_default_smith_simulation_use_cases,
+       SmithPacer, SmithConfig, SmithResult, calculate_smith_mode!,
        SimulationUseCase, CampaignMetadata, CampaignState, SimulationConfig,
        tick!, tick_with!, should_tick,
        plot_simulation

@@ -1,4 +1,4 @@
-function check_hard_constraints(uc::SimulationUseCase, result::PIDResult)::Tuple{Bool,String}
+function check_hard_constraints(uc::SimulationUseCase, result)::Tuple{Bool,String}
     # Check 1: Probability zero outside flight
     if uc.state.current_time < uc.metadata.start_time ||
        uc.state.current_time >= uc.metadata.end_time
