@@ -395,6 +395,61 @@ solve_budget_imc(τ = 1.5, α = 0.7, λ = 0.0)     # λ=0: same as adaptive Smit
 solve_budget_mpc(τ = 1.5, α = 0.7)              # constrained adaptive Smith
 ```
 
+#### MPC and IMC response to sudden budget drops
+
+Grant fulfilment mismatch (α < 1) is a *slow* disturbance — the balance drifts
+gradually away from the ideal.  A more acute test is an **instantaneous budget
+drop**: a demand spike of size Δ that arrives at t_spike and is invisible to all
+controllers for a blind window of length τ (same as sections 5d–5e).
+
+This is a harder test for MPC and IMC than for Smith because:
+- The spike introduces a step discontinuity in B(t) not present in the internal model.
+- Both the α̂ estimator and the IMC filter need time to detect the sudden change.
+
+`demo_mpc_spike` runs MPC, IMC, Smith, and corrected-denom under a single spike
+of Δ = 10 at t_spike = 0.2·T.
+
+![MPC and IMC response to sudden budget drop](plots/mpc_spike.png)
+
+| τ | Corr. denom | Smith | MPC | IMC (λ=0.1) |
+|---|-------------|-------|-----|-------------|
+| 5%·T  | 100.0 | 100.0 | 100.0 | 100.0 |
+| 10%·T | 100.0 | 100.0 | 100.0 | 100.0 |
+| 30%·T | 100.7 | 100.0 | **100.0** | 105.8 |
+
+**MPC — perfect recovery at all delays.**  The safety constraint `rate ≤ B(t-τ)/(T-t)`
+prevents overspend during the blind window: the controller cannot spend faster than the
+*observed* (pre-spike) balance allows.  After the blind window closes at t_spike + τ,
+the lower balance is reflected in the delayed observation and the adaptive estimate
+exhausts the remaining budget exactly.  The constraint makes MPC as resilient to spikes
+as the Smith predictor, while also being robust to α mismatch.
+
+**IMC — overshoots at large τ.**  During the blind window the filtered correction term
+`corr_f` was calibrated to the pre-spike trajectory.  After the spike, the observed
+balance is lower but `corr_f` still reflects the pre-spike level for ~τ_f = λ·T time.
+During that convergence, `B_hat = B(t-τ) - corr_f` is higher than the true remaining
+balance, causing the controller to overspend.  At τ = 30%·T the overshoot is 5.8%.
+Reducing λ brings IMC closer to MPC at the cost of less α-noise smoothing.
+
+**Smith — perfect, as before.**  The spike is absorbed into S(t) immediately; B̂ = B(t-τ) − (S(t)−S(t-τ))
+reflects the true balance regardless of when the spike occurred.
+
+**Key insight.** MPC's safety constraint `min(B̂, B_obs)/(T-t)` gives it the best of
+both worlds: the adaptive estimate handles α mismatch, and the observation cap handles
+sudden spikes.  IMC's filter, designed to smooth noisy α̂, is a liability for sudden
+structural changes — it is slow to react.  For systems where both α mismatch and
+demand spikes occur, **MPC is the recommended controller**.
+
+```julia
+# Single spike: compare MPC, IMC, Smith, corrected-denom
+demo_mpc_spike()
+demo_mpc_spike(delay_fracs = [0.05, 0.10, 0.30], spike_Δ = 20.0)
+
+# Solve directly
+s1, s2, _ = solve_budget_mpc_spike(Q=100.0, T=10.0, τ=3.0, t_spike=2.0, spike_Δ=10.0)
+s1, s2, _ = solve_budget_imc_spike(Q=100.0, T=10.0, τ=3.0, t_spike=2.0, spike_Δ=10.0)
+```
+
 ### What the plot shows
 
 ![Budget spending strategies](plots/budget_delay.png)
