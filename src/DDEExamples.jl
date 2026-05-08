@@ -5,6 +5,8 @@ using DifferentialEquations: Tsit5, ODEProblem
 using Plots
 using Statistics: mean, std
 
+include("pid/pid_simulation.jl")
+
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
        solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
@@ -17,7 +19,13 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        solve_budget_pid_pacer_two_spikes, demo_demand_two_spikes,
        demo_demand_spike_then_drop,
        demo_demand_random,
-       demo, demo_zero_delay
+       demo, demo_zero_delay,
+       run_pid_simulation, run_single_scenario!,
+       create_default_pid_pacer_simulation_use_cases,
+       PIDPacer, PIDConfig, PIDResult, calculate_cruise_mode!,
+       SimulationUseCase, CampaignMetadata, CampaignState, SimulationConfig,
+       tick!, tick_with!, should_tick,
+       plot_simulation
 
 """
 Mackey-Glass equation: du/dt = β * u(t-τ) / (1 + u(t-τ)^n) - γ * u(t)
