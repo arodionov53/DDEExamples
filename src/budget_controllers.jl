@@ -119,6 +119,97 @@ function solve_budget_smith(;
 end
 
 """
+    solve_budget_smith_mismatch(; Q, T, τ, α)
+
+Smith predictor under model mismatch: only a fraction α ∈ (0,1] of each
+granted unit is actually consumed.  The controller's internal tally S(t)
+counts every grant as fully consumed, but real spend is α × grant rate.
+
+State: u = [B(t), S(t)] where S(t) is the controller's *believed* cumulative
+spend (= α⁻¹ times actual spend).  The true balance evolves at rate α×rate,
+while the controller predicts using S(t) at face value, causing it to believe
+the budget is draining faster than it really is and therefore underspend.
+
+α = 1.0  → perfect model, identical to solve_budget_smith (B(T) = 0).
+α < 1.0  → model over-counts spend; controller underspends by ~(1-α).
+"""
+function solve_budget_smith_mismatch(;
+    Q = 100.0, T = 10.0, τ = 1.5, α = 0.6,
+    tspan = (0.0, T - 1e-3)
+)
+    function smith_mismatch!(du, u, h, p, t)
+        Q, T, τ, α = p
+        B_delayed = h(p, t - τ)[1]
+        S_delayed = h(p, t - τ)[2]
+        # Controller predicts balance using its (inflated) tally
+        B_hat = B_delayed - (u[2] - S_delayed)
+        rate  = max(B_hat, 0.0) / (T - t)   # grant rate computed by controller
+        du[1] = -α * rate    # actual spend: only α fraction consumed
+        du[2] =      rate    # controller's tally: counts full grant
+    end
+
+    h(p, t) = [Q, 0.0]
+    p = (Q, T, τ, α)
+    prob = DDEProblem(smith_mismatch!, [Q, 0.0], h, tspan, p; constant_lags = [τ])
+    solve(prob, MethodOfSteps(Tsit5()))
+end
+
+"""
+    demo_smith_mismatch(; Q, T, τ, alphas)
+
+Show how the Smith predictor degrades when its internal model over-counts
+actual spend (grant fulfilment rate α < 1).
+
+One subplot per α value.  Each compares the Smith predictor (perfect model),
+the mismatched Smith, and the corrected-denominator fallback.
+
+Saves `plots/smith_mismatch.png`.
+"""
+function demo_smith_mismatch(;
+    Q      = 100.0,
+    T      = 10.0,
+    τ      = 1.5,
+    alphas = [0.9, 0.7, 0.5]
+)
+    ts          = range(0.0, T - 1e-3; length = 500)
+    ideal_spent = Q .* ts ./ T
+
+    plts = map(alphas) do α
+        sol_perfect  = solve_budget_smith(; Q, T, τ)
+        sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
+        sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
+
+        spent_perfect  = sol_perfect.(ts;  idxs = 2)         # S(t) = spent
+        spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)    # actual Q - B
+        spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
+
+        p = plot(ts, ideal_spent;
+            label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+            xlabel = "time", ylabel = "spent",
+            title  = "α = $α  (τ = $(round(Int, 100τ/T))%·T)",
+            legend = :topleft)
+        hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+        plot!(p, ts, spent_perfect;
+            label  = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
+            linewidth = 2, color = :green)
+        plot!(p, ts, spent_mismatch;
+            label  = "Smith α=$α ($(round(spent_mismatch[end]; digits=1)))",
+            linewidth = 2, color = :red)
+        plot!(p, ts, spent_cd;
+            label  = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
+            linewidth = 2, color = :blue)
+        p
+    end
+
+    fig = plot(plts...; layout = (length(alphas), 1),
+               size = (800, 360 * length(alphas)),
+               plot_title = "Smith predictor under model mismatch  (Q=$Q, T=$T, τ=$τ)")
+    savefig(fig, "plots/smith_mismatch.png")
+    println("Plot saved to plots/smith_mismatch.png")
+    fig
+end
+
+"""
     solve_budget_pid(; Q, T, τ, Kp, Ki, Kd)
 
 PID controller for budget spending under information delay.

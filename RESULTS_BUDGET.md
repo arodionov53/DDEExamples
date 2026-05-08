@@ -217,6 +217,62 @@ controller to underspend.  The corrected-denominator strategy, which makes no
 model assumption, is more robust in those cases at the cost of accuracy at
 large τ.
 
+#### When the Smith predictor fails: grant fulfilment mismatch
+
+In production, the controller issues grants (approves spend) but a downstream
+system decides whether each grant is *actually consumed*.  If only a fraction
+α < 1 of each granted unit is consumed — due to buffering, request cancellation,
+or partial fulfilment — the real spend rate is α × (grant rate), but the
+controller's internal tally S(t) records the full grant.
+
+**What goes wrong.** The predictor computes:
+
+    B̂(t) = B(t-τ) − (S(t) − S(t-τ))
+
+S(t) counts grants at face value, so it grows faster than the true spend.
+The predicted balance B̂(t) is therefore *lower* than the true B(t): the
+controller believes the budget is draining faster than it really is.  In
+response it issues grants at a lower rate than necessary, systematically
+under-spending the budget.
+
+The under-spend fraction is proportional to (1 − α): at α = 0.5 (half of all
+grants consumed) the controller finishes spending roughly 50% of the budget
+regardless of τ.
+
+**Why corrected-denominator is immune.** The corrected-denom controller never
+maintains an internal model of spend — it only looks at the delayed balance
+observation and adjusts the denominator algebraically.  Model mismatch
+therefore has no effect on it: if α < 1 and grants are smaller than expected,
+the delayed observation B(t-τ) automatically reflects the slower drain, and
+the controller adjusts its rate accordingly.
+
+![Smith predictor under model mismatch](plots/smith_mismatch.png)
+
+Three subplots for α = 0.9, 0.7, 0.5 (τ = 1.5, fixed).  Each panel compares:
+
+- **Smith α=1** (green): perfect model, spends exactly 100%.
+- **Smith α<1** (red): mismatch — under-spends proportionally.  At α=0.5
+  the controller finishes at ≈50%, completely missing the budget target.
+- **Corrected denom** (blue): unaffected by α — still hits close to 100%
+  because it makes no assumption about how grants are consumed.
+
+**Key takeaway.** The Smith predictor should only be used when the internal
+model of spend is reliable — i.e. grants are consumed immediately and in full.
+When fulfilment is uncertain or delayed a second time downstream, the
+corrected-denominator controller is the safer choice.
+
+```julia
+# Perfect model — B(T) = 0 exactly
+solve_budget_smith(τ = 1.5)
+
+# 30% of grants not consumed — controller under-spends
+solve_budget_smith_mismatch(τ = 1.5, α = 0.7)
+
+# Compare across fulfilment rates
+demo_smith_mismatch()
+demo_smith_mismatch(τ = 3.0, alphas = [0.95, 0.8, 0.6])
+```
+
 ### What the plot shows
 
 ![Budget spending strategies](plots/budget_delay.png)
