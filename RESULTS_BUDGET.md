@@ -294,7 +294,7 @@ by over-issuing grants proportionally.
 
 ![Controllers under grant fulfilment mismatch](plots/smith_mismatch.png)
 
-Three subplots for α = 0.9, 0.7, 0.5 (τ = 1.5, fixed).  Each panel shows:
+Grid: rows = τ (15%·T and 30%·T), columns = α (0.9, 0.7, 0.5).  Each panel shows:
 
 - **Smith α=1** (green): perfect model, spends exactly 100%.
 - **Smith naive** (red): mismatch — under-spends proportionally to (1−α).
@@ -315,15 +315,18 @@ Three subplots for α = 0.9, 0.7, 0.5 (τ = 1.5, fixed).  Each panel shows:
 
 **Key observations:**
 
-- The PIDPacer's baseline under-delivery (~87% at τ=15%) is *unchanged* by
-  α — the rate error self-corrects, but the slow integral still takes time to
-  wind up. The mismatch does not make it worse or better.
-- The adaptive Smith is the only controller that achieves both delay tolerance
-  (like plain Smith) and mismatch robustness (like PIDPacer), at the cost of
-  needing three lags and a one-window estimation period.
-- At large τ (e.g. 30%·T) the corrected-denom controller degrades while the
-  adaptive Smith and PIDPacer remain stable — making them the preferred choices
-  in high-latency environments with uncertain fulfilment.
+- The PIDPacer's baseline under-delivery is *unchanged* by α — the rate error
+  self-corrects, but the slow integral still takes time to wind up. The
+  mismatch does not make it worse or better.
+- **At τ = 30%·T** the corrected-denom controller degrades (under-spends ~95%
+  even at α=1) and its error compounds with mismatch.  The adaptive Smith and
+  PIDPacer remain stable across all α values at this delay.
+- **At τ = 30%·T with low α**, the adaptive Smith's one-window estimation lag
+  is 3 time units — long enough that it takes until t ≈ 6 to correct, leaving
+  less time to recover; final spend is slightly lower than at τ = 15%·T.
+- The adaptive Smith is the only controller that achieves both full delay
+  tolerance and mismatch robustness. Its only weakness is the estimation lag
+  of one τ window when α changes suddenly.
 
 ```julia
 # Perfect model — B(T) = 0 exactly
@@ -335,9 +338,9 @@ solve_budget_smith_mismatch(τ = 1.5, α = 0.7)
 # Adaptive Smith — estimates α̂ and compensates
 solve_budget_smith_adaptive(τ = 1.5, α = 0.7)
 
-# Compare all five controllers across fulfilment rates
+# Compare all five controllers across fulfilment rates and delay values
 demo_smith_mismatch()
-demo_smith_mismatch(τ = 3.0, alphas = [0.95, 0.8, 0.6])
+demo_smith_mismatch(taus = [0.1, 0.3] .* 10.0, alphas = [0.95, 0.8, 0.6])
 ```
 
 ### What the plot shows

@@ -221,71 +221,73 @@ function solve_budget_smith_mismatch(;
 end
 
 """
-    demo_smith_mismatch(; Q, T, τ, alphas)
+    demo_smith_mismatch(; Q, T, taus, alphas)
 
-Show how the Smith predictor degrades when its internal model over-counts
-actual spend (grant fulfilment rate α < 1).
+Compare all five controllers under grant fulfilment mismatch (α < 1) across
+multiple delay and fulfilment-rate combinations.
 
-One subplot per α value.  Each compares the Smith predictor (perfect model),
-the mismatched Smith, and the corrected-denominator fallback.
+Grid layout: rows = τ values, columns = α values.
+Each cell shows: ideal, Smith α=1, Smith naive, Smith adaptive,
+corrected-denom, and PIDPacer.
 
 Saves `plots/smith_mismatch.png`.
 """
 function demo_smith_mismatch(;
     Q      = 100.0,
     T      = 10.0,
-    τ      = 1.5,
+    taus   = [0.15, 0.30] .* T,
     alphas = [0.9, 0.7, 0.5]
 )
     ts          = range(0.0, T - 1e-3; length = 500)
     ideal_spent = Q .* ts ./ T
 
-    plts = map(alphas) do α
-        sol_perfect  = solve_budget_smith(; Q, T, τ)
-        sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
-        sol_adaptive = solve_budget_smith_adaptive(; Q, T, τ, α)
-        sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
-        # PIDPacer: request_rate scaled so that at prob=1 actual spend = α·request_rate = Q/T
-        # i.e. request_rate = Q/(T·α) so the sigmoid at 0.5 starts at Q/(2T) actual spend.
-        # We keep request_rate = Q/T (production default) so the plot shows the raw behaviour.
-        sol_pid = solve_budget_pid_pacer(; Q, T, τ,
-                      request_rate = Q / T / α)   # inflate grants to compensate for α
+    plts = [
+        begin
+            τ_pct = round(Int, 100 * τ / T)
+            sol_perfect  = solve_budget_smith(; Q, T, τ)
+            sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
+            sol_adaptive = solve_budget_smith_adaptive(; Q, T, τ, α)
+            sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
+            sol_pid      = solve_budget_pid_pacer(; Q, T, τ,
+                               request_rate = Q / T / α)
 
-        # actual spent = Q - B for balance-tracking solvers
-        spent_perfect  = sol_perfect.(ts;  idxs = 2)
-        spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)
-        spent_adaptive = Q .- sol_adaptive.(ts; idxs = 1)
-        spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
-        # PIDPacer: actual spend rate = prob * request_rate * α, tracked via balance
-        spent_pid      = Q .- sol_pid.(ts; idxs = 1)
+            spent_perfect  = sol_perfect.(ts;  idxs = 2)
+            spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)
+            spent_adaptive = Q .- sol_adaptive.(ts; idxs = 1)
+            spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
+            spent_pid      = Q .- sol_pid.(ts; idxs = 1)
 
-        p = plot(ts, ideal_spent;
-            label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
-            xlabel = "time", ylabel = "spent",
-            title  = "α = $α  (τ = $(round(Int, 100τ/T))%·T)",
-            legend = :topleft)
-        hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
-        plot!(p, ts, spent_perfect;
-            label = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
-            linewidth = 2, color = :green)
-        plot!(p, ts, spent_mismatch;
-            label = "Smith naive ($(round(spent_mismatch[end]; digits=1)))",
-            linewidth = 2, color = :red)
-        plot!(p, ts, spent_adaptive;
-            label = "Smith adaptive ($(round(spent_adaptive[end]; digits=1)))",
-            linewidth = 2, color = :purple)
-        plot!(p, ts, spent_cd;
-            label = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
-            linewidth = 2, color = :blue)
-        plot!(p, ts, spent_pid;
-            label = "PIDPacer ($(round(spent_pid[end]; digits=1)))",
-            linewidth = 2, color = :orange)
-        p
-    end
+            p = plot(ts, ideal_spent;
+                label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
+                xlabel = "time", ylabel = "spent",
+                title  = "α=$α  τ=$(τ_pct)%·T",
+                legend = :topleft)
+            hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
+            plot!(p, ts, spent_perfect;
+                label = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
+                linewidth = 2, color = :green)
+            plot!(p, ts, spent_mismatch;
+                label = "Smith naive ($(round(spent_mismatch[end]; digits=1)))",
+                linewidth = 2, color = :red)
+            plot!(p, ts, spent_adaptive;
+                label = "Smith adaptive ($(round(spent_adaptive[end]; digits=1)))",
+                linewidth = 2, color = :purple)
+            plot!(p, ts, spent_cd;
+                label = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
+                linewidth = 2, color = :blue)
+            plot!(p, ts, spent_pid;
+                label = "PIDPacer ($(round(spent_pid[end]; digits=1)))",
+                linewidth = 2, color = :orange)
+            p
+        end
+        for τ in taus for α in alphas
+    ]
 
-    fig = plot(plts...; layout = (length(alphas), 1),
-               size = (800, 400 * length(alphas)),
-               plot_title = "Controllers under grant fulfilment mismatch  (Q=$Q, T=$T, τ=$τ)")
+    nrows = length(taus)
+    ncols = length(alphas)
+    fig = plot(plts...; layout = (nrows, ncols),
+               size = (380 * ncols, 400 * nrows),
+               plot_title = "Controllers under grant fulfilment mismatch  (Q=$Q, T=$T)")
     savefig(fig, "plots/smith_mismatch.png")
     println("Plot saved to plots/smith_mismatch.png")
     fig
