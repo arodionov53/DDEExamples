@@ -75,20 +75,19 @@ function calculate_smith_mode!(pacer::SmithPacer;
 
     # Smith predictor: reconstruct current balance from delayed observation
     # B̂(t) = B(t-τ) - (S(t) - S(t-τ))
-    predicted_balance = delayed_balance - (current_spent - delayed_spent)
+    predicted_balance = max(0.0, delayed_balance - (current_spent - delayed_spent))
 
     time_remaining = end_time - current_time
     if time_remaining <= 0.0
         return SmithResult(0.0, predicted_balance, 0.0, 0.0)
     end
 
-    # Ideal spend rate to exhaust remaining budget linearly
+    # Ideal spend rate to exhaust remaining balance over remaining time
     ideal_rate = predicted_balance / time_remaining
 
-    # Normalize: compare ideal rate against the campaign's linear target rate
-    total_duration = end_time - start_time
-    target_rate_per_second = total_budget / total_duration
-    probability = clamp(ideal_rate / target_rate_per_second, 0.0, 1.0)
+    # Probability = idealRate / maxSpendRate
+    # "What fraction of available supply should we accept?"
+    probability = clamp(ideal_rate / max_spend_rate, 0.0, 1.0)
 
     # Update state
     pacer.last_time = current_time
