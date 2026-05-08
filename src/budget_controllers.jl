@@ -119,7 +119,73 @@ function solve_budget_smith(;
 end
 
 """
-    solve_budget_smith_mismatch(; Q, T, τ, α)
+    solve_budget_smith_adaptive(; Q, T, τ, α)
+
+Adaptive Smith predictor: estimates the grant fulfilment rate α̂(t) from
+delayed observations and uses it to scale the internal-model correction.
+
+The standard Smith predictor computes:
+
+    B̂(t) = B(t-τ) − (S(t) − S(t-τ))
+
+and fails when the true fulfilment rate α < 1, because S(t) over-counts real
+spend.  The adaptive version estimates α̂ from the ratio of observed drain to
+predicted drain over the window [t-2τ, t-τ]:
+
+    predicted drain = S(t-τ) − S(t-2τ)     (grants issued in that window)
+    observed drain  = B(t-2τ) − B(t-τ)     (balance change seen via observation)
+    α̂(t)           = observed / predicted  (clamped to [0.01, 2] for stability)
+
+Then the corrected prediction is:
+
+    B̂(t) = B(t-τ) − α̂(t) · (S(t) − S(t-τ))
+
+When α̂ = 1 this reduces to the standard Smith predictor.  When α̂ < 1 the
+controller issues grants at a higher rate to compensate.
+
+State: u = [B(t), S(t)] — same as solve_budget_smith.
+Requires three constant lags (τ, 2τ, 3τ) to estimate α̂.
+
+`α` sets the true fulfilment rate of the simulated system (as in
+solve_budget_smith_mismatch).  The controller does *not* know α — it
+estimates α̂ from observations.
+"""
+function solve_budget_smith_adaptive(;
+    Q = 100.0, T = 10.0, τ = 1.5, α = 1.0,
+    tspan = (0.0, T - 1e-3)
+)
+    function smith_adaptive!(du, u, h, p, t)
+        Q, T, τ, α = p
+        dt = τ > 0 ? τ : 1e-6
+
+        B_now   = h(p, t -   τ)[1];  S_now   = h(p, t -   τ)[2]
+        B_prev  = h(p, t - 2τ)[1];  S_prev  = h(p, t - 2τ)[2]
+        B_prev2 = h(p, t - 3τ)[1];  S_prev2 = h(p, t - 3τ)[2]
+
+        # Estimate α̂ from the window [t-3τ, t-2τ]
+        predicted_drain = S_prev - S_prev2          # grants issued
+        observed_drain  = B_prev2 - B_prev          # actual balance drop
+        α_hat = predicted_drain > 1e-6 ?
+                    clamp(observed_drain / predicted_drain, 0.01, 2.0) : 1.0
+
+        # Adaptive Smith prediction
+        B_hat = B_now - α_hat * (u[2] - S_now)
+        B_hat = max(B_hat, 0.0)
+
+        rate  = B_hat / (T - t)
+        du[1] = -α * rate       # actual spend
+        du[2] =      rate       # controller's tally (grants issued)
+    end
+
+    h(p, t) = [Q, 0.0]
+    p = (Q, T, τ, α)
+    prob = DDEProblem(smith_adaptive!, [Q, 0.0], h, tspan, p;
+                      constant_lags = [τ, 2τ, 3τ])
+    solve(prob, MethodOfSteps(Tsit5()); dtmax = τ / 10)
+end
+
+"""
+    demo_smith_mismatch(; Q, T, τ, alphas)
 
 Smith predictor under model mismatch: only a fraction α ∈ (0,1] of each
 granted unit is actually consumed.  The controller's internal tally S(t)
@@ -177,10 +243,12 @@ function demo_smith_mismatch(;
     plts = map(alphas) do α
         sol_perfect  = solve_budget_smith(; Q, T, τ)
         sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
+        sol_adaptive = solve_budget_smith_adaptive(; Q, T, τ, α)
         sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
 
-        spent_perfect  = sol_perfect.(ts;  idxs = 2)         # S(t) = spent
-        spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)    # actual Q - B
+        spent_perfect  = sol_perfect.(ts;  idxs = 2)
+        spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)
+        spent_adaptive = Q .- sol_adaptive.(ts; idxs = 1)
         spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
 
         p = plot(ts, ideal_spent;
@@ -190,20 +258,23 @@ function demo_smith_mismatch(;
             legend = :topleft)
         hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
         plot!(p, ts, spent_perfect;
-            label  = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
+            label = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
             linewidth = 2, color = :green)
         plot!(p, ts, spent_mismatch;
-            label  = "Smith α=$α ($(round(spent_mismatch[end]; digits=1)))",
+            label = "Smith naive ($(round(spent_mismatch[end]; digits=1)))",
             linewidth = 2, color = :red)
+        plot!(p, ts, spent_adaptive;
+            label = "Smith adaptive ($(round(spent_adaptive[end]; digits=1)))",
+            linewidth = 2, color = :purple)
         plot!(p, ts, spent_cd;
-            label  = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
+            label = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
             linewidth = 2, color = :blue)
         p
     end
 
     fig = plot(plts...; layout = (length(alphas), 1),
                size = (800, 360 * length(alphas)),
-               plot_title = "Smith predictor under model mismatch  (Q=$Q, T=$T, τ=$τ)")
+               plot_title = "Smith predictor: naive vs. adaptive vs. corrected-denom  (Q=$Q, T=$T, τ=$τ)")
     savefig(fig, "plots/smith_mismatch.png")
     println("Plot saved to plots/smith_mismatch.png")
     fig
