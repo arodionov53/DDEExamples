@@ -19,7 +19,7 @@ wraps an ODE solver (here Tsit5, an adaptive 5th-order Runge-Kutta method)
 and extends it to handle the delayed terms by carefully tracking
 discontinuities that propagate forward from the initial time.
 
-![Combined plot of all four examples](dde_examples.png)
+![Combined plot of all four examples](plots/dde_examples.png)
 
 Budget-pacing experiments (sections 5–5g, four controllers, demand spikes,
 random events) are documented separately in [RESULTS_BUDGET.md](RESULTS_BUDGET.md).
@@ -297,7 +297,7 @@ the same equation reveals exactly what the delay contributes to the dynamics.
 
 Run `DDEExamples.demo_zero_delay()` to generate the comparison plot:
 
-![DDE vs ODE comparison](dde_vs_ode.png)
+![DDE vs ODE comparison](plots/dde_vs_ode.png)
 
 ### Mackey-Glass: τ = 0
 

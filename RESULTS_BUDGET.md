@@ -49,7 +49,7 @@ line from Q at t = 0 to 0 at t = T — perfect uniform spending.
 
 ### What the plot shows
 
-![Budget spending with information delay](budget_delay.png)
+![Budget spending with information delay](plots/budget_delay.png)
 
 The dashed line is the ideal τ = 0 trajectory.  Each solid curve shows the
 true remaining balance when the controller works from a delayed observation:
@@ -116,7 +116,7 @@ regardless of how large `τ` is.
 
 ### What the plot shows
 
-![Budget spending strategies](budget_delay.png)
+![Budget spending strategies](plots/budget_delay.png)
 
 Three subplots, one per delay (5%, 10%, 50% of T).  Each shows:
 
@@ -187,7 +187,7 @@ the delay ratio:
 
 ### What the plot shows
 
-![Controller comparison](budget_controllers.png)
+![Controller comparison](plots/budget_controllers.png)
 
 | Controller | τ = 10%·T | τ = 30%·T | τ = 50%·T |
 |------------|-----------|-----------|-----------|
@@ -258,7 +258,7 @@ reporting lags, data pipeline jitter, or measurement uncertainty.
 `demo_budget_controllers_noise` runs each controller across an ensemble of
 trajectories where τ is drawn from Uniform(τ·(1-noise), τ·(1+noise)).
 
-![Controllers under random τ noise](budget_controllers_noise.png)
+![Controllers under random τ noise](plots/budget_controllers_noise.png)
 
 | Controller | Small τ, with noise | Large τ, with noise |
 |------------|---------------------|---------------------|
@@ -332,7 +332,7 @@ This requires three constant lags (τ, 2τ, 3τ).
 
 ### What the plot shows
 
-![PIDPacer vs Smith vs Corrected denom](pid_pacer_comparison.png)
+![PIDPacer vs Smith vs Corrected denom](plots/pid_pacer_comparison.png)
 
 | τ | PID pacer | Smith | Corr. denom |
 |---|-----------|-------|-------------|
@@ -378,7 +378,7 @@ while preserving the sigmoid's safety cap.
 `demo_pid_pacer_noise` runs the same three controllers under τ noise, using a
 3×3 grid (one row per delay, one column per controller).
 
-![PIDPacer noise sensitivity](pid_pacer_noise.png)
+![PIDPacer noise sensitivity](plots/pid_pacer_noise.png)
 
 | Controller | τ=5%·T | τ=10%·T | τ=30%·T | Noise band |
 |------------|--------|---------|---------|------------|
@@ -454,7 +454,7 @@ until the blind window closes at `t_spike + τ`.
 | 10%·T | 100.0 | 100.0 | 88.6 |
 | 30%·T | 100.7 | 100.0 | 96.3 |
 
-![Demand spike experiment](demand_spike.png)
+![Demand spike experiment](plots/demand_spike.png)
 
 ### Analysis
 
@@ -519,7 +519,7 @@ new state and a history function that replays all prior segments.
 | 10%·T | 2.50 | 100.0 | 100.0 | 98.0 |
 | 30%·T | 3.50 | 103.1 | 100.0 | 92.5 |
 
-![Two demand spikes experiment](demand_two_spikes.png)
+![Two demand spikes experiment](plots/demand_two_spikes.png)
 
 ### Analysis
 
@@ -625,7 +625,7 @@ Parameters: Q = 100, T = 10, τ ∈ {5%, 10%, 30%}·T.
 | 10%·T | 100.0 | 100.0 | 85.7 |
 | 30%·T |  95.8 | 100.0 | 88.6 |
 
-![Spike then refund experiment](demand_spike_then_drop.png)
+![Spike then refund experiment](plots/demand_spike_then_drop.png)
 
 ### Analysis
 
@@ -727,7 +727,7 @@ Parameters: Q = 100, T = 10, τ ∈ {5%, 10%, 30%}·T.
 | 10%·T |  99.9 ± 0.1 | 100.0 ± 0.0 | 83.9 ± 5.7 |
 | 30%·T |  96.6 ± 2.5 | 100.0 ± 0.0 | 91.3 ± 5.7 |
 
-![Random demand events](demand_random.png)
+![Random demand events](plots/demand_random.png)
 
 ### Analysis
 

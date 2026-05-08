@@ -124,8 +124,8 @@ function demo_pid_pacer(;
     fig = plot(plts...; layout=(length(delays), 1),
                size=(800, 380*length(delays)),
                plot_title="PIDPacer vs Smith vs Corr.denom  (Q=$Q, T=$T$noise_str)")
-    savefig(fig, "pid_pacer_comparison.png")
-    println("Plot saved to pid_pacer_comparison.png")
+    savefig(fig, "plots/pid_pacer_comparison.png")
+    println("Plot saved to plots/pid_pacer_comparison.png")
     fig
 end
 
@@ -190,7 +190,7 @@ function demo_pid_pacer_noise(;
     fig = plot(plts...; layout = (nrows, length(strategies)),
                size = (380 * length(strategies), 400 * nrows),
                plot_title = "PIDPacer noise sensitivity  (Q=$Q, T=$T)")
-    savefig(fig, "pid_pacer_noise.png")
-    println("Plot saved to pid_pacer_noise.png")
+    savefig(fig, "plots/pid_pacer_noise.png")
+    println("Plot saved to plots/pid_pacer_noise.png")
     fig
 end

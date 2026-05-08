@@ -194,8 +194,8 @@ function demo_budget_controllers(;
     fig = plot(plts...; layout = (length(delays), 1),
                size = (800, 360 * length(delays)),
                plot_title = "Budget spending controllers (Q=$Q, T=$T)")
-    savefig(fig, "budget_controllers.png")
-    println("Plot saved to budget_controllers.png")
+    savefig(fig, "plots/budget_controllers.png")
+    println("Plot saved to plots/budget_controllers.png")
     fig
 end
 
@@ -263,8 +263,8 @@ function demo_budget_controllers_noise(;
     fig = plot(plts...; layout = (nrows, length(strategies)),
                size = (380 * length(strategies), 400 * nrows),
                plot_title = "Controllers under random τ noise  (Q=$Q, T=$T)")
-    savefig(fig, "budget_controllers_noise.png")
-    println("Plot saved to budget_controllers_noise.png")
+    savefig(fig, "plots/budget_controllers_noise.png")
+    println("Plot saved to plots/budget_controllers_noise.png")
     fig
 end
 
@@ -325,8 +325,8 @@ function demo_budget_delay(;
     fig = plot(plts...; layout = (length(delays), 1),
                size = (800, 350 * length(delays)),
                plot_title = title)
-    savefig(fig, "budget_delay.png")
-    println("Plot saved to budget_delay.png")
+    savefig(fig, "plots/budget_delay.png")
+    println("Plot saved to plots/budget_delay.png")
     fig
 end
 
@@ -391,7 +391,7 @@ function demo_budget_delay_with_noise(;
     nrows = length(delays)
     fig = plot(plts...; layout = (nrows, 3), size = (1100, 380 * nrows),
                plot_title = "Effect of τ noise on spending strategies  (Q=$Q, T=$T)")
-    savefig(fig, "budget_delay_noise.png")
-    println("Plot saved to budget_delay_noise.png")
+    savefig(fig, "plots/budget_delay_noise.png")
+    println("Plot saved to plots/budget_delay_noise.png")
     fig
 end

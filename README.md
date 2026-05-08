@@ -36,7 +36,7 @@ Example 5 includes four controllers of increasing sophistication:
 
 `demo_budget_delay_with_noise` and `demo_pid_pacer_noise` compare all strategies across multiple τ noise levels (mean ± 1σ ribbons):
 
-![Effect of τ noise on spending strategies](budget_delay_noise.png)
+![Effect of τ noise on spending strategies](plots/budget_delay_noise.png)
 
 | Strategy | τ = 10%·T | τ = 50%·T | Noise sensitivity |
 |----------|-----------|-----------|-------------------|

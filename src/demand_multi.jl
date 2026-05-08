@@ -212,8 +212,8 @@ function demo_demand_two_spikes(;
     fig = plot(plts...; layout=(nrows, ncols),
                size=(380 * ncols, 360 * nrows),
                plot_title="Two demand spikes (Δ1=$(spike_Δ1), Δ2=$(spike_Δ2), d<τ)  Q=$(Q), T=$(T)")
-    savefig(fig, "demand_two_spikes.png")
-    println("Plot saved to demand_two_spikes.png")
+    savefig(fig, "plots/demand_two_spikes.png")
+    println("Plot saved to plots/demand_two_spikes.png")
     fig
 end
 
@@ -302,7 +302,7 @@ function demo_demand_spike_then_drop(;
     fig = plot(plts...; layout=(nrows, ncols),
                size=(380 * ncols, 360 * nrows),
                plot_title="Spike then refund (spike −$(spike_Δ) @ $(t_spike_frac)T, drop +$(drop_Δ) @ $(t_drop_frac)T)  Q=$(Q), T=$(T)")
-    savefig(fig, "demand_spike_then_drop.png")
-    println("Plot saved to demand_spike_then_drop.png")
+    savefig(fig, "plots/demand_spike_then_drop.png")
+    println("Plot saved to plots/demand_spike_then_drop.png")
     fig
 end

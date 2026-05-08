@@ -203,7 +203,7 @@ function demo_demand_spike(;
     fig = plot(plts...; layout=(nrows, ncols),
                size=(380 * ncols, 360 * nrows),
                plot_title="Demand spike (Δ=$(spike_Δ), d<τ)  Q=$(Q), T=$(T)")
-    savefig(fig, "demand_spike.png")
-    println("Plot saved to demand_spike.png")
+    savefig(fig, "plots/demand_spike.png")
+    println("Plot saved to plots/demand_spike.png")
     fig
 end

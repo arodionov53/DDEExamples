@@ -25,8 +25,8 @@ function demo_zero_delay()
     plot!(p3, sol_td0; idxs = 1, label = "τ = 0 (ODE)", linestyle = :dash, linewidth = 2)
 
     fig = plot(p1, p2, p3; layout = (3, 1), size = (800, 900))
-    savefig(fig, "dde_vs_ode.png")
-    println("Plot saved to dde_vs_ode.png")
+    savefig(fig, "plots/dde_vs_ode.png")
+    println("Plot saved to plots/dde_vs_ode.png")
     fig
 end
 
@@ -51,7 +51,7 @@ function demo()
     end
 
     fig = plot(p1, p2, p3, p4; layout = (4, 1), size = (800, 1200))
-    savefig(fig, "dde_examples.png")
-    println("Plot saved to dde_examples.png")
+    savefig(fig, "plots/dde_examples.png")
+    println("Plot saved to plots/dde_examples.png")
     fig
 end

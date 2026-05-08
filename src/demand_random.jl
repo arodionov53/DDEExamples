@@ -239,7 +239,7 @@ function demo_demand_random(;
     fig = plot(plts...; layout=(nrows, ncols),
                size=(380 * ncols, 360 * nrows),
                plot_title="Random demand events (n=$(n_events), Δ≤$(event_Δ_max))  Q=$(Q), T=$(T)")
-    savefig(fig, "demand_random.png")
-    println("Plot saved to demand_random.png")
+    savefig(fig, "plots/demand_random.png")
+    println("Plot saved to plots/demand_random.png")
     fig
 end
