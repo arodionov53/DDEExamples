@@ -38,6 +38,58 @@ This is modeled by replacing B(t) with B(t-τ) in the spend-rate formula,
 giving the DDE above.  The history function is B(t) = Q for all t ≤ 0 (the
 budget starts full and is unchanged before the horizon begins).
 
+### Derivation
+
+The goal is to spend budget Q at a **constant rate Q/T**, so the ideal remaining
+balance at every moment is the straight line B*(t) = Q·(1 - t/T).
+
+**Step 1 — ideal controller with perfect information.**
+
+If the controller could observe the true current balance B(t), the natural rule
+is: *set the spend rate equal to the remaining balance divided by the remaining
+time*.  This would exhaust exactly the current balance by the deadline:
+
+    spend rate(t) = B(t) / (T - t)
+
+which gives the ODE
+
+    dB/dt = -B(t) / (T - t)
+
+Separating variables and integrating from 0 to t with B(0) = Q:
+
+    ∫₀ᵗ dB/B = -∫₀ᵗ ds/(T-s)
+    ln B(t) - ln Q = ln(T-t) - ln T
+    B(t) = Q · (T-t)/T = Q · (1 - t/T)
+
+This is exactly the ideal trajectory — perfect uniform spending with B(T) = 0.
+
+**Step 2 — introducing information delay.**
+
+In practice the controller never sees B(t) directly.  Suppose it only receives
+a balance report that is τ time units old: the observation at time t is B(t-τ).
+Applying the same "exhaust the observed balance by deadline" rule with the stale
+observation:
+
+    spend rate(t) = B(t-τ) / (T - t)
+
+gives the DDE
+
+    dB/dt = -B(t-τ) / (T - t)
+
+This is the budget-pacing DDE.  The only change from the ideal ODE is replacing
+B(t) with B(t-τ) in the numerator.  Since B(t-τ) > B(t) always (spending has
+occurred in the interval [t-τ, t] that the controller hasn't seen yet), the
+spend rate is *systematically too high*, causing the controller to over-spend
+and arrive at the deadline with B < 0.
+
+**Why the history function is B(t) = Q for t ≤ 0.**
+
+Before the horizon starts there is no spending, so the full budget Q is
+available at all past times.  Setting h(t) = Q for t ≤ 0 makes B(t-τ) = Q
+for the first τ time units of the horizon (0 ≤ t ≤ τ), which correctly
+models the controller waking up at t = 0 with a full budget and τ-stale
+observations that show only the pre-horizon state.
+
 ### Analytical zero-delay limit
 
 With τ = 0 the equation becomes:
