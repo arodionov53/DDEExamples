@@ -221,63 +221,85 @@ function solve_budget_smith_mismatch(;
 end
 
 """
-    demo_smith_mismatch(; Q, T, taus, alphas)
+    demo_smith_mismatch(; Q, T, taus, alphas, alpha_noise, n_samples)
 
 Compare all five controllers under grant fulfilment mismatch (α < 1) across
 multiple delay and fulfilment-rate combinations.
 
 Grid layout: rows = τ values, columns = α values.
-Each cell shows: ideal, Smith α=1, Smith naive, Smith adaptive,
-corrected-denom, and PIDPacer.
+Each cell shows deterministic curves for: ideal, Smith α=1, Smith naive,
+Smith adaptive, corrected-denom, and PIDPacer.
+
+When `alpha_noise > 0` (default 0.10), an additional Monte Carlo ribbon is
+overlaid for each controller: `n_samples` trajectories are run with α drawn
+from Normal(α, alpha_noise·α), clipped to (0.01, 1], and the mean ± 1σ band
+is plotted with matching colour and reduced opacity.  This shows how sensitive
+each controller is to trial-to-trial variation in the fulfilment rate.
 
 Saves `plots/smith_mismatch.png`.
 """
 function demo_smith_mismatch(;
-    Q      = 100.0,
-    T      = 10.0,
-    taus   = [0.15, 0.30] .* T,
-    alphas = [0.9, 0.7, 0.5]
+    Q           = 100.0,
+    T           = 10.0,
+    taus        = [0.15, 0.30] .* T,
+    alphas      = [0.9, 0.7, 0.5],
+    alpha_noise = 0.10,
+    n_samples   = 30
 )
     ts          = range(0.0, T - 1e-3; length = 500)
     ideal_spent = Q .* ts ./ T
 
+    strategies = [
+        ("Smith α=1",     :green,  (τ, α) -> solve_budget_smith(; Q, T, τ),
+                                   (s, α) -> s.(ts; idxs=2)),
+        ("Smith naive",   :red,    (τ, α) -> solve_budget_smith_mismatch(; Q, T, τ, α),
+                                   (s, α) -> Q .- s.(ts; idxs=1)),
+        ("Smith adaptive",:purple, (τ, α) -> solve_budget_smith_adaptive(; Q, T, τ, α),
+                                   (s, α) -> Q .- s.(ts; idxs=1)),
+        ("Corr. denom",   :blue,   (τ, α) -> solve_budget_corrected_denom(; Q, T, τ),
+                                   (s, α) -> Q .- s.(ts; idxs=1)),
+        ("PIDPacer",      :orange, (τ, α) -> solve_budget_pid_pacer(; Q, T, τ,
+                                                 request_rate = Q / T / α),
+                                   (s, α) -> Q .- s.(ts; idxs=1)),
+    ]
+
     plts = [
         begin
             τ_pct = round(Int, 100 * τ / T)
-            sol_perfect  = solve_budget_smith(; Q, T, τ)
-            sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
-            sol_adaptive = solve_budget_smith_adaptive(; Q, T, τ, α)
-            sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
-            sol_pid      = solve_budget_pid_pacer(; Q, T, τ,
-                               request_rate = Q / T / α)
-
-            spent_perfect  = sol_perfect.(ts;  idxs = 2)
-            spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)
-            spent_adaptive = Q .- sol_adaptive.(ts; idxs = 1)
-            spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
-            spent_pid      = Q .- sol_pid.(ts; idxs = 1)
-
             p = plot(ts, ideal_spent;
                 label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
                 xlabel = "time", ylabel = "spent",
                 title  = "α=$α  τ=$(τ_pct)%·T",
                 legend = :topleft)
             hline!(p, [Q]; label = "cap", linewidth = 1, linestyle = :dot, color = :grey)
-            plot!(p, ts, spent_perfect;
-                label = "Smith α=1 ($(round(spent_perfect[end]; digits=1)))",
-                linewidth = 2, color = :green)
-            plot!(p, ts, spent_mismatch;
-                label = "Smith naive ($(round(spent_mismatch[end]; digits=1)))",
-                linewidth = 2, color = :red)
-            plot!(p, ts, spent_adaptive;
-                label = "Smith adaptive ($(round(spent_adaptive[end]; digits=1)))",
-                linewidth = 2, color = :purple)
-            plot!(p, ts, spent_cd;
-                label = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
-                linewidth = 2, color = :blue)
-            plot!(p, ts, spent_pid;
-                label = "PIDPacer ($(round(spent_pid[end]; digits=1)))",
-                linewidth = 2, color = :orange)
+
+            for (name, col, solver, extractor) in strategies
+                # deterministic curve at nominal α
+                sol  = solver(τ, α)
+                det  = extractor(sol, α)
+                plot!(p, ts, det;
+                    label = "$name ($(round(det[end]; digits=1)))",
+                    linewidth = 2, color = col)
+
+                # Monte Carlo ribbon: α ~ Normal(α, alpha_noise·α) clipped to (0.01,1]
+                if alpha_noise > 0
+                    cols = Vector{Vector{Float64}}()
+                    while length(cols) < n_samples
+                        α_i = clamp(α + alpha_noise * α * randn(), 0.01, 1.0)
+                        try
+                            s = solver(τ, α_i)
+                            s.retcode == ReturnCode.Success || continue
+                            push!(cols, extractor(s, α_i))
+                        catch
+                        end
+                    end
+                    mat = hcat(cols...)
+                    μ   = vec(mean(mat; dims=2))
+                    σ   = vec(std(mat;  dims=2))
+                    plot!(p, ts, μ; ribbon=σ, fillalpha=0.12, linewidth=0,
+                          color=col, label="")
+                end
+            end
             p
         end
         for τ in taus for α in alphas
@@ -285,9 +307,10 @@ function demo_smith_mismatch(;
 
     nrows = length(taus)
     ncols = length(alphas)
+    noise_str = alpha_noise > 0 ? ", α noise=±$(round(Int, alpha_noise*100))%" : ""
     fig = plot(plts...; layout = (nrows, ncols),
-               size = (380 * ncols, 400 * nrows),
-               plot_title = "Controllers under grant fulfilment mismatch  (Q=$Q, T=$T)")
+               size = (380 * ncols, 420 * nrows),
+               plot_title = "Controllers under grant fulfilment mismatch$(noise_str)  (Q=$Q, T=$T)")
     savefig(fig, "plots/smith_mismatch.png")
     println("Plot saved to plots/smith_mismatch.png")
     fig

@@ -294,15 +294,22 @@ by over-issuing grants proportionally.
 
 ![Controllers under grant fulfilment mismatch](plots/smith_mismatch.png)
 
-Grid: rows = τ (15%·T and 30%·T), columns = α (0.9, 0.7, 0.5).  Each panel shows:
+Grid: rows = τ (15%·T and 30%·T), columns = α (0.9, 0.7, 0.5).  Each panel
+shows a deterministic curve at nominal α plus a shaded ±1σ ribbon from 30
+Monte Carlo trials with α ~ Normal(α, 0.1α) clipped to (0, 1]:
 
-- **Smith α=1** (green): perfect model, spends exactly 100%.
-- **Smith naive** (red): mismatch — under-spends proportionally to (1−α).
+- **Smith α=1** (green): perfect model, spends exactly 100%; narrow ribbon
+  because α noise has no effect when the model is correct.
+- **Smith naive** (red): mismatch — under-spends proportionally to (1−α);
+  wide ribbon because the final spend tracks α directly, and α noise maps
+  linearly to output noise.
 - **Smith adaptive** (purple): estimates α̂ and compensates; near-100% even
-  at α = 0.5, with only a one-window transient at the start.
-- **Corrected denom** (blue): unaffected by α — near-100% at this τ.
-- **PIDPacer** (orange): also immune to α — its rate-based error signal
-  automatically tracks actual drain regardless of fulfilment ratio.
+  at α = 0.5; ribbon is moderate — the α̂ estimator absorbs most of the
+  noise but a one-window lag remains.
+- **Corrected denom** (blue): unaffected by α — near-100% at τ=15%·T;
+  narrow ribbon because it makes no model assumption.
+- **PIDPacer** (orange): immune to α via rate-based error; ribbon is tight
+  — the sigmoid bounds the output regardless of α fluctuations.
 
 **Controller ranking under model mismatch:**
 
@@ -339,8 +346,15 @@ solve_budget_smith_mismatch(τ = 1.5, α = 0.7)
 solve_budget_smith_adaptive(τ = 1.5, α = 0.7)
 
 # Compare all five controllers across fulfilment rates and delay values
+# (includes ±10% α noise ribbons by default)
 demo_smith_mismatch()
 demo_smith_mismatch(taus = [0.1, 0.3] .* 10.0, alphas = [0.95, 0.8, 0.6])
+
+# Wider noise, more samples
+demo_smith_mismatch(alpha_noise = 0.20, n_samples = 60)
+
+# Disable noise ribbons (deterministic only)
+demo_smith_mismatch(alpha_noise = 0.0)
 ```
 
 ### What the plot shows
