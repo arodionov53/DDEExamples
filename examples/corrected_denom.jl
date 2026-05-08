@@ -141,6 +141,5 @@ println("-"^48)
 
 fig = plot(p1, p2; layout = (1, 2), size = (1000, 420),
            plot_title = "Corrected denominator controller  (Q=$Q, T=$T)")
-mkpath("plots")
-savefig(fig, "plots/corrected_denom.png")
-println("\nPlot saved to plots/corrected_denom.png")
+savefig(fig, "corrected_denom.png")
+println("\nPlot saved to corrected_denom.png")
