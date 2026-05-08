@@ -4,9 +4,9 @@ using DDEExamples
 @testset "PID Discrete Simulation" begin
     use_cases = create_default_pid_pacer_simulation_use_cases()
 
-    for uc in use_cases
+    for (i, uc) in enumerate(use_cases)
         @testset "$(uc.name)" begin
-            hard_v, soft_v, iters = run_single_scenario!(uc; plot=true, verbose=false)
+            hard_v, soft_v, iters = run_single_scenario!(uc; plot=true, verbose=false, index=i-1)
 
             if !uc.expects.ignore_pacing_violations_while_in_flight
                 @test hard_v == 0

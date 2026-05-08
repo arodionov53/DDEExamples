@@ -44,6 +44,13 @@ Pkg.instantiate()
 
 ## Quick start
 
+Regenerate all charts:
+
+```bash
+./refresh-ddeexamples-charts.sh  # DDE model comparison charts
+./refresh-simulation-charts.sh   # PID and Smith discrete-time simulation plots
+```
+
 ```julia
 using DDEExamples
 

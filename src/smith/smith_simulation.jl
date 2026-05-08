@@ -6,7 +6,7 @@ include("smith_simulation_use_cases.jl")
 
 # ── Main Entry Points ────────────────────────────────────────────────────────
 
-function run_single_smith_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::Bool=false, τ::Float64=5.0)
+function run_single_smith_scenario!(uc::SimulationUseCase; plot::Bool=true, verbose::Bool=false, τ::Float64=5.0, index::Int=0)
     # Initialize
     tick_with!(uc, 0.0)
 
@@ -66,7 +66,8 @@ function run_single_smith_scenario!(uc::SimulationUseCase; plot::Bool=true, verb
 
     # Generate plot
     if plot && !isempty(plot_data)
-        plot_simulation(uc.name, plot_data, uc.metadata.start_time, uc.metadata.end_time;
+        plot_name = "SmithPacer_$(index)_$(uc.name)"
+        plot_simulation(plot_name, plot_data, uc.metadata.start_time, uc.metadata.end_time;
             output_dir="src/smith/plots")
     end
 
@@ -86,7 +87,7 @@ function run_smith_simulation(; scenario::Union{Nothing,String}=nothing, plot::B
 
     for (i, uc) in enumerate(use_cases)
         verbose && println("Running scenario $i/$(length(use_cases)): $(uc.name)")
-        hv, sv, iters = run_single_smith_scenario!(uc; plot, verbose, τ)
+        hv, sv, iters = run_single_smith_scenario!(uc; plot, verbose, τ, index=i-1)
         results[uc.name] = (hard_violations=hv, soft_violations=sv, iterations=iters)
     end
 
