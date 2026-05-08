@@ -2,7 +2,10 @@
 
 A Julia package with worked examples of **Delay Differential Equations (DDEs)** solved with [DifferentialEquations.jl](https://docs.sciml.ai/DiffEqDocs/).
 
-Each example pairs a real-world motivation with a runnable solver function and a comparison against the zero-delay (ODE) limit.  Detailed results and explanations are in [RESULTS.md](RESULTS.md).
+Each example pairs a real-world motivation with a runnable solver function and a comparison against the zero-delay (ODE) limit.  Detailed results and explanations are in:
+
+- [RESULTS.md](RESULTS.md) — classical DDEs (Mackey-Glass, logistic, two-delay, zero-delay comparison)
+- [RESULTS_BUDGET.md](RESULTS_BUDGET.md) — budget-pacing controllers (sections 5–5g: naive, corrected denom, Smith, PID, PIDPacer, demand spikes, random events)
 
 ## Examples
 
