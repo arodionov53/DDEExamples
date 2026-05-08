@@ -7,7 +7,8 @@ using Statistics: mean, std
 
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
-       solve_budget_nodelay, solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
+       solve_budget_nodelay, demo_budget_nodelay,
+       solve_budget_delay, solve_budget_corrected_denom, solve_budget_smith,
        solve_budget_pid, demo_budget_controllers, demo_budget_controllers_noise,
        solve_budget_pid_pacer, demo_pid_pacer, demo_pid_pacer_noise,
        demo_budget_delay, demo_budget_delay_with_noise,

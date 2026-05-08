@@ -93,16 +93,25 @@ observations that show only the pre-horizon state.
 **Zero-delay (ODE) example.**
 
 Setting τ = 0 recovers the ideal ODE `dB/dt = -B(t)/(T-t)`.  `solve_budget_nodelay`
-solves this directly without a DDE solver and serves as a reference baseline:
-
-```julia
-sol0 = solve_budget_nodelay(Q = 100.0, T = 10.0)
-# sol0.(range(0, 9.999; length=5); idxs=1)  ≈  [100, 75, 50, 25, 0]
-```
-
+solves this directly without a DDE solver and serves as a reference baseline.
 The solution is the straight line B(t) = Q·(1 - t/T), verified by the exact
-integral computed in Step 1 above.  Any DDE controller with τ > 0 should be
-compared against this ideal to quantify the cost of the information delay.
+integral computed in Step 1 above.
+
+`demo_budget_nodelay` plots the ODE solution side by side with several naive
+DDE trajectories (τ = 5%, 10%, 30%·T), showing concretely how the delay
+deforms the balance curve and causes the late-stage spending rush:
+
+![τ = 0 ideal vs. naive delayed controller](plots/budget_nodelay.png)
+
+- **Left panel (remaining balance):** the ODE and the exact dotted line
+  overlap perfectly; delayed curves sag above the ideal early on, then dive
+  below zero near the deadline.
+- **Right panel (cumulative spend):** the ODE tracks the diagonal exactly;
+  delayed controllers under-spend until they are forced to accelerate,
+  breaching the budget cap at large τ.
+
+Any DDE controller with τ > 0 should be compared against this ideal to
+quantify the cost of the information delay.
 
 ### Analytical zero-delay limit
 
@@ -199,6 +208,10 @@ Three subplots, one per delay (5%, 10%, 50% of T).  Each shows:
 ```julia
 # Zero-delay ideal (ODE) — perfect linear drawdown, B(T) = 0
 solve_budget_nodelay()
+
+# Plot ODE vs. naive DDE at several delays (saves plots/budget_nodelay.png)
+demo_budget_nodelay()
+demo_budget_nodelay(delays = [0.1, 0.2, 0.5] .* 10.0)
 
 # Naive controller — observe the overspend grow with τ
 solve_budget_delay(τ = 0.1)
