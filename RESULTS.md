@@ -13,7 +13,7 @@ the past — not just the present — DDEs can produce oscillations, limit cycle
 and chaos even in scalar (one-variable) equations, behaviors that require at
 least two or three variables in an ODE system.
 
-All four examples below are solved with `MethodOfSteps(Tsit5())`, the
+All examples are solved with `MethodOfSteps(Tsit5())`, the
 standard approach in Julia's DifferentialEquations ecosystem.  `MethodOfSteps`
 wraps an ODE solver (here Tsit5, an adaptive 5th-order Runge-Kutta method)
 and extends it to handle the delayed terms by carefully tracking
@@ -572,6 +572,7 @@ small noise into large instability.
 | Naive | Baseline / reference only | Always overspends |
 | Corrected denom | Small delays (τ < 20%·T), minimal code change | Approximation error grows with τ |
 | PID | Small delays with unknown dynamics | Unstable for τ > ~20%·T; noise-sensitive |
+| PIDPacer | Production use; noise-robust, never overspends | Structural under-delivery at small τ; rate-based — blind to demand spikes |
 | Smith predictor | Any delay when the model is known | Requires explicit model of spending process |
 
 ---
@@ -794,6 +795,8 @@ The imaginary parts of these roots create the oscillation frequencies.
 | Two-Delay | Pure exponential decay | Damped oscillations |
 | Budget (naive) | Perfect linear drawdown to zero | Underspend early, overshoot deadline |
 | Budget (corr. denom) | Perfect linear drawdown | Near-perfect; slight under-spend at large τ |
+| Budget (PID) | Perfect linear drawdown | Matches corrected-denom at small τ; unstable at large τ |
+| Budget (PIDPacer) | Perfect linear drawdown | Under-delivers at small τ; converges near deadline |
 | Budget (Smith) | Perfect linear drawdown | Exactly perfect at any τ |
 
 ### Usage
