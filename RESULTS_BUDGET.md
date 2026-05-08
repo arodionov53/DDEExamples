@@ -440,14 +440,48 @@ sudden spikes.  IMC's filter, designed to smooth noisy α̂, is a liability for 
 structural changes — it is slow to react.  For systems where both α mismatch and
 demand spikes occur, **MPC is the recommended controller**.
 
+#### Two successive budget drops
+
+The single-spike result extends to two successive drops.  `demo_mpc_two_spikes`
+injects spikes at t_spike1 = 0.2·T and t_spike2 = 0.5·T, each of size Δ = 10.
+
+![Two budget drops: MPC vs IMC vs Smith vs Corr.denom](plots/mpc_two_spikes.png)
+
+| τ | Corr. denom | Smith | MPC | IMC (λ=0.1) |
+|---|-------------|-------|-----|-------------|
+| 5%·T  | 100.0 | 100.0 | 100.0 | 100.6 |
+| 10%·T | 100.0 | 100.0 | 100.0 | 100.1 |
+| 30%·T | 105.6 | 100.0 | **100.0** | 110.3 |
+
+**MPC — still perfect.** The safety constraint absorbs each spike independently.
+Each spike lowers B(t-τ) after the blind window, which immediately lowers
+`rate_safe`, preventing cumulative overspend.  Two spikes are no harder than one.
+
+**IMC — overshoot compounds.** Each spike adds a transient filter lag.  At
+τ = 30%·T the two overshoot episodes partially overlap (second spike arrives
+before `corr_f` has converged from the first), pushing the total overshoot to
+10.3% — roughly double the single-spike 5.8%.  At τ = 5%·T the blind windows
+are short (0.5 time units each) and the filter converges quickly, so the
+overshoot is only 0.6%.
+
+**Corrected denom — compounds at large τ.** The two blind-window over-spend
+episodes add: 105.6% vs 100.7% for a single spike — consistent with the
+earlier two-spike results.  MPC has no such problem.
+
 ```julia
-# Single spike: compare MPC, IMC, Smith, corrected-denom
+# Single spike
 demo_mpc_spike()
 demo_mpc_spike(delay_fracs = [0.05, 0.10, 0.30], spike_Δ = 20.0)
 
+# Two successive spikes
+demo_mpc_two_spikes()
+demo_mpc_two_spikes(t_spike1_frac = 0.2, t_spike2_frac = 0.35)   # overlapping blind windows
+
 # Solve directly
-s1, s2, _ = solve_budget_mpc_spike(Q=100.0, T=10.0, τ=3.0, t_spike=2.0, spike_Δ=10.0)
-s1, s2, _ = solve_budget_imc_spike(Q=100.0, T=10.0, τ=3.0, t_spike=2.0, spike_Δ=10.0)
+s1, s2, _       = solve_budget_mpc_spike(τ=3.0, t_spike=2.0, spike_Δ=10.0)
+s1, s2, s3, _, _ = solve_budget_mpc_two_spikes(τ=3.0, spike_Δ1=10.0, spike_Δ2=10.0)
+s1, s2, _       = solve_budget_imc_spike(τ=3.0, t_spike=2.0, spike_Δ=10.0)
+s1, s2, s3, _, _ = solve_budget_imc_two_spikes(τ=3.0, spike_Δ1=10.0, spike_Δ2=10.0)
 ```
 
 ### What the plot shows

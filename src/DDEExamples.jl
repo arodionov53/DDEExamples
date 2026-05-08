@@ -11,6 +11,7 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        solve_budget_smith_mismatch, solve_budget_smith_adaptive, demo_smith_mismatch,
        solve_budget_imc, solve_budget_mpc,
        solve_budget_mpc_spike, solve_budget_imc_spike, demo_mpc_spike,
+       solve_budget_mpc_two_spikes, solve_budget_imc_two_spikes, demo_mpc_two_spikes,
        solve_budget_pid, demo_budget_controllers, demo_budget_controllers_noise,
        solve_budget_pid_pacer, demo_pid_pacer, demo_pid_pacer_noise,
        demo_budget_delay, demo_budget_delay_with_noise,
