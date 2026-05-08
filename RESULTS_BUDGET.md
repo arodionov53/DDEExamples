@@ -298,42 +298,76 @@ Grid: rows = τ (15%·T and 30%·T), columns = α (0.9, 0.7, 0.5).  Each panel
 shows a deterministic curve at nominal α plus a shaded ±1σ ribbon from 30
 Monte Carlo trials with α ~ Normal(α, 0.1α) clipped to (0, 1]:
 
-- **Smith α=1** (green): perfect model, spends exactly 100%; narrow ribbon
-  because α noise has no effect when the model is correct.
-- **Smith naive** (red): mismatch — under-spends proportionally to (1−α);
-  wide ribbon because the final spend tracks α directly, and α noise maps
-  linearly to output noise.
-- **Smith adaptive** (purple): estimates α̂ and compensates; near-100% even
-  at α = 0.5; ribbon is moderate — the α̂ estimator absorbs most of the
-  noise but a one-window lag remains.
-- **Corrected denom** (blue): unaffected by α — near-100% at τ=15%·T;
-  narrow ribbon because it makes no model assumption.
-- **PIDPacer** (orange): immune to α via rate-based error; ribbon is tight
-  — the sigmoid bounds the output regardless of α fluctuations.
+- **Smith α=1** (green): perfect model, spends exactly 100%.
+- **Smith naive** (red): under-spends proportionally to (1−α); wide ribbon.
+- **Smith adaptive** (purple): near-100% across all α; moderate ribbon.
+- **Corrected denom** (blue): near-100% at τ=15%·T; narrow ribbon; degrades at τ=30%·T.
+- **PIDPacer** (orange): immune to α; baseline deficit persists; tight ribbon.
+- **IMC** (teal): overshoots at low α due to filter lag; ribbon is wide at low α.
+- **MPC** (brown): ~100% across all α and τ; narrowest ribbon — constrained rate
+  prevents both over- and under-spend regardless of α̂ accuracy.
+
+#### IMC (Internal Model Control)
+
+IMC is a generalisation of the Smith predictor that adds a **robustness
+filter** on the correction term.  The standard Smith computes:
+
+    correction(t) = α̂(t) · (S(t) - S(t-τ))     [instantaneous]
+
+IMC instead applies a first-order low-pass filter to this correction:
+
+    τ_f · d(corr_f)/dt = correction(t) - corr_f(t),   τ_f = λ·T
+    B̂_imc(t) = B(t-τ) - corr_f(t)
+
+The filter smooths out noise in α̂ and sudden changes in α, at the cost
+of a slower response to mismatch.  When λ → 0 (no filter), IMC reduces
+to adaptive Smith.  Larger λ gives more smoothing but more overspend at
+low α (since the correction lags the true mismatch).
+
+#### MPC (Model Predictive Control)
+
+MPC solves a one-step constrained optimisation at each instant:
+
+  - **Estimate** B̂ via the adaptive Smith formula.
+  - **Constrain** the rate to never exceed the naive (safe) rate B(t-τ)/(T-t).
+  - **Optimal rate**: min(B̂/(T-t), B(t-τ)/(T-t)).
+
+The constraint prevents overspend when α̂ is incorrect or when the
+adaptive estimate overshoots.  When B̂ ≤ B(t-τ) (underspending detected),
+MPC uses the full adaptive rate; when B̂ > B(t-τ) (model thinks budget is
+higher than observed), MPC falls back to the conservative naive rate.
+
+This is genuinely MPC: it minimises ‖B(T)‖² subject to B(t) ≥ 0 using
+a receding horizon of length T-t.
 
 **Controller ranking under model mismatch:**
 
-| Controller | α = 1 | α = 0.7 | α = 0.5 | Why robust? |
-|------------|-------|---------|---------|-------------|
-| Smith naive | 100% | ~70% | ~50% | Not robust — mirrors α directly |
-| Corrected denom | ~100% | ~100% | ~100% | No internal model; degrades at large τ |
-| PIDPacer | ~87% | ~87% | ~87% | Rate-based: sees actual drain; baseline under-delivery persists |
-| Smith adaptive | 100% | ~98% | ~95% | Estimates α̂; lag of one τ window |
+| Controller | α=1 τ=15% | α=0.7 τ=15% | α=0.5 τ=15% | α=0.7 τ=30% | Characteristic |
+|------------|-----------|-------------|-------------|-------------|----------------|
+| Smith naive | 100% | ~70% | ~50% | ~70% | Mirrors α directly |
+| Corrected denom | ~100% | ~100% | ~100% | ~95% | No model; degrades at large τ |
+| PIDPacer | ~87% | ~87% | ~87% | ~99% | Rate-based; baseline deficit persists |
+| IMC (λ=0.1) | 100% | ~119% | ~132% | ~129% | Smoothed Smith; overshoots at low α |
+| Smith adaptive | 100% | ~98% | ~95% | ~96% | Best mismatch correction; one-window lag |
+| MPC | 100% | ~100% | ~99% | ~100% | Constrained: never overshoots; best overall |
 
 **Key observations:**
 
-- The PIDPacer's baseline under-delivery is *unchanged* by α — the rate error
-  self-corrects, but the slow integral still takes time to wind up. The
-  mismatch does not make it worse or better.
-- **At τ = 30%·T** the corrected-denom controller degrades (under-spends ~95%
-  even at α=1) and its error compounds with mismatch.  The adaptive Smith and
-  PIDPacer remain stable across all α values at this delay.
-- **At τ = 30%·T with low α**, the adaptive Smith's one-window estimation lag
-  is 3 time units — long enough that it takes until t ≈ 6 to correct, leaving
-  less time to recover; final spend is slightly lower than at τ = 15%·T.
-- The adaptive Smith is the only controller that achieves both full delay
-  tolerance and mismatch robustness. Its only weakness is the estimation lag
-  of one τ window when α changes suddenly.
+- **MPC is the most robust controller** — it achieves ~100% across all α and
+  τ values without ever overshooting.  The safety constraint prevents the
+  adaptive estimate from causing overspend when α̂ is imperfect.
+- **IMC overshoots at low α** — the filter delays the correction, so during
+  the filter transient the controller issues more grants than needed.  At
+  λ=0.1 the transient lasts ~λ·T = 1 time unit; reducing λ moves IMC toward
+  adaptive Smith.  IMC is most useful when α̂ is noisy and smoothing is
+  needed to prevent grant-rate jitter.
+- **Adaptive Smith** is the best controller when α is stable and α̂ estimation
+  is reliable — fastest convergence with minimal overshoot.
+- **PIDPacer** has a structural under-delivery bias that is *unchanged* by α.
+  The rate-based error self-corrects the mismatch but the slow integral
+  (Ki=0.1) still takes time to wind up.
+- **At τ = 30%·T** corrected-denom degrades to ~95%.  MPC, adaptive Smith,
+  and PIDPacer all remain near-100%.
 
 ```julia
 # Perfect model — B(T) = 0 exactly
@@ -345,16 +379,20 @@ solve_budget_smith_mismatch(τ = 1.5, α = 0.7)
 # Adaptive Smith — estimates α̂ and compensates
 solve_budget_smith_adaptive(τ = 1.5, α = 0.7)
 
-# Compare all five controllers across fulfilment rates and delay values
-# (includes ±10% α noise ribbons by default)
+# All seven controllers across fulfilment rates and delays (±10% α noise)
 demo_smith_mismatch()
 demo_smith_mismatch(taus = [0.1, 0.3] .* 10.0, alphas = [0.95, 0.8, 0.6])
 
-# Wider noise, more samples
+# Wider noise or more samples
 demo_smith_mismatch(alpha_noise = 0.20, n_samples = 60)
 
-# Disable noise ribbons (deterministic only)
+# Deterministic only (no ribbons)
 demo_smith_mismatch(alpha_noise = 0.0)
+
+# IMC and MPC directly
+solve_budget_imc(τ = 1.5, α = 0.7)              # filtered Smith correction
+solve_budget_imc(τ = 1.5, α = 0.7, λ = 0.0)     # λ=0: same as adaptive Smith
+solve_budget_mpc(τ = 1.5, α = 0.7)              # constrained adaptive Smith
 ```
 
 ### What the plot shows

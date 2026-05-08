@@ -250,17 +250,21 @@ function demo_smith_mismatch(;
     ideal_spent = Q .* ts ./ T
 
     strategies = [
-        ("Smith α=1",     :green,  (τ, α) -> solve_budget_smith(; Q, T, τ),
-                                   (s, α) -> s.(ts; idxs=2)),
-        ("Smith naive",   :red,    (τ, α) -> solve_budget_smith_mismatch(; Q, T, τ, α),
-                                   (s, α) -> Q .- s.(ts; idxs=1)),
-        ("Smith adaptive",:purple, (τ, α) -> solve_budget_smith_adaptive(; Q, T, τ, α),
-                                   (s, α) -> Q .- s.(ts; idxs=1)),
-        ("Corr. denom",   :blue,   (τ, α) -> solve_budget_corrected_denom(; Q, T, τ),
-                                   (s, α) -> Q .- s.(ts; idxs=1)),
-        ("PIDPacer",      :orange, (τ, α) -> solve_budget_pid_pacer(; Q, T, τ,
-                                                 request_rate = Q / T / α),
-                                   (s, α) -> Q .- s.(ts; idxs=1)),
+        ("Smith α=1",     :green,       (τ, α) -> solve_budget_smith(; Q, T, τ),
+                                        (s, α) -> s.(ts; idxs=2)),
+        ("Smith naive",   :red,         (τ, α) -> solve_budget_smith_mismatch(; Q, T, τ, α),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
+        ("Smith adaptive",:purple,      (τ, α) -> solve_budget_smith_adaptive(; Q, T, τ, α),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
+        ("Corr. denom",   :blue,        (τ, α) -> solve_budget_corrected_denom(; Q, T, τ),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
+        ("PIDPacer",      :orange,      (τ, α) -> solve_budget_pid_pacer(; Q, T, τ,
+                                                      request_rate = Q / T / α),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
+        ("IMC",           :teal,        (τ, α) -> solve_budget_imc(; Q, T, τ, α),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
+        ("MPC",           :brown,       (τ, α) -> solve_budget_mpc(; Q, T, τ, α),
+                                        (s, α) -> Q .- s.(ts; idxs=1)),
     ]
 
     plts = [
