@@ -164,21 +164,58 @@ rate changes rapidly near the deadline.
 
 #### Strategy 2 — Smith predictor
 
-Reconstruct the *true* current balance from the delayed observation and the
-known cumulative spend since `t - τ`:
+**Intuition.** The controller cannot see B(t) — only B(t-τ), which is τ
+time units stale.  But the controller *does* know how much it has spent since
+then, because it issued every grant itself.  It can therefore undo the delay
+by subtracting the spending that happened in the blind window [t-τ, t]:
+
+    B̂(t) = B(t-τ) − spending in [t-τ, t]
+
+This is the Smith predictor idea: use an *internal model* of the process to
+predict what the current state must be, then feed that prediction to the
+controller instead of the raw delayed observation.
+
+**Derivation.** Define S(t) as the total amount spent up to time t, so
+S(t) = Q − B(t) and S(0) = 0.  The spending in the blind window is:
+
+    S(t) − S(t-τ) = (Q − B(t)) − (Q − B(t-τ)) = B(t-τ) − B(t)
+
+Substituting into the predictor formula:
 
     B̂(t) = B(t-τ) − (S(t) − S(t-τ))
+           = B(t-τ) − (B(t-τ) − B(t))
+           = B(t)
 
-where `S(t)` is the total amount spent up to time `t`.  Because
-`S(t) − S(t-τ) = B(t-τ) − B(t)`, the prediction simplifies to `B̂(t) = B(t)`
-— it perfectly cancels the delay by using the internal model of the spending
-process.  The controller then uses the predicted balance:
+The prediction is exact: B̂(t) = B(t) for all t, regardless of τ.
+Plugging the perfect prediction into the spend-rate formula:
 
-    dB/dt = -B̂(t) / (T - t)
+    dB/dt = −B̂(t) / (T − t) = −B(t) / (T − t)
 
-This requires tracking a second state variable `S(t)`, giving a 2D DDE
-system.  The result is identical to the zero-delay ideal: `B(T) = 0` exactly,
-regardless of how large `τ` is.
+This is the same ODE as the τ = 0 ideal, so the Smith-predictor DDE has
+exactly the same solution: B(t) = Q·(1 − t/T) and B(T) = 0.
+
+**State equations.** Tracking S(t) as a second state variable gives the 2D
+DDE system that `solve_budget_smith` solves:
+
+    dB/dt = −(B(t-τ) − (S(t) − S(t-τ))) / (T − t)
+    dS/dt = −dB/dt
+
+with history B(t) = Q, S(t) = 0 for t ≤ 0.
+
+**Why this works even though S(t) itself depends on B(t).** At first glance
+the formula appears circular: B̂(t) depends on S(t) which depends on B(t).
+But S(t) is not obtained from the delayed channel — it is the controller's
+own running tally of grants issued, updated continuously in real time.  The
+delay only affects the observation channel (B(t-τ)); the internal bookkeeping
+(S(t)) is always current.
+
+**Limitation.** The prediction is only exact when the internal model is
+correct, i.e. when every grant is actually spent the moment it is issued.  If
+grants can be buffered, cancelled, or delayed downstream, S(t) over-estimates
+actual spend and B̂(t) under-estimates the true balance, causing the
+controller to underspend.  The corrected-denominator strategy, which makes no
+model assumption, is more robust in those cases at the cost of accuracy at
+large τ.
 
 ### What the plot shows
 
