@@ -85,8 +85,10 @@ function calculate_smith_mode!(pacer::SmithPacer;
     # Ideal spend rate to exhaust remaining budget linearly
     ideal_rate = predicted_balance / time_remaining
 
-    # Normalize to probability: what fraction of max_spend_rate do we need?
-    probability = clamp(ideal_rate / (max_spend_rate * dt), 0.0, 1.0)
+    # Normalize: compare ideal rate against the campaign's linear target rate
+    total_duration = end_time - start_time
+    target_rate_per_second = total_budget / total_duration
+    probability = clamp(ideal_rate / target_rate_per_second, 0.0, 1.0)
 
     # Update state
     pacer.last_time = current_time
