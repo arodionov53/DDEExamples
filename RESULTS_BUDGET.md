@@ -270,29 +270,60 @@ old), so sudden step-changes in α still cause a transient error.  But for
 slowly varying or constant α the adaptive predictor converges to the correct
 fulfilment rate and recovers near-100% spend.
 
-![Smith predictor: naive vs. adaptive vs. corrected-denom](plots/smith_mismatch.png)
+#### PIDPacer under model mismatch
+
+The PIDPacer measures the *observed rate* from the delayed balance:
+
+    observedRate(t) = (B(t-τ) − B(t-2τ)) / τ
+
+This is the actual drain of the budget — not the grants issued.  If only α
+of each grant is consumed, the balance drains more slowly, and the PIDPacer
+*sees* the slower drain directly in its error signal:
+
+    e(t) = targetRate − observedRate(t)
+
+Because observed drain is already α × grant rate, the PIDPacer automatically
+increases grant probability until the observed rate matches the target — no
+model of α is needed.  The sigmoid bounds the output, and the integral
+accumulates until the rate error is corrected.
+
+In `demo_smith_mismatch` the PIDPacer's `request_rate` is inflated to
+`Q/(T·α)` so that at full probability (prob = 1) the actual spend equals Q/T.
+This mirrors a production system that compensates for known average fulfilment
+by over-issuing grants proportionally.
+
+![Controllers under grant fulfilment mismatch](plots/smith_mismatch.png)
 
 Three subplots for α = 0.9, 0.7, 0.5 (τ = 1.5, fixed).  Each panel shows:
 
 - **Smith α=1** (green): perfect model, spends exactly 100%.
 - **Smith naive** (red): mismatch — under-spends proportionally to (1−α).
-- **Smith adaptive** (purple): estimates α̂ from observations and compensates;
-  recovers close to 100% even at α = 0.5, with only a small transient lag.
-- **Corrected denom** (blue): unaffected by α — near-100% at this τ, but
-  would degrade at larger τ where the adaptive Smith remains accurate.
+- **Smith adaptive** (purple): estimates α̂ and compensates; near-100% even
+  at α = 0.5, with only a one-window transient at the start.
+- **Corrected denom** (blue): unaffected by α — near-100% at this τ.
+- **PIDPacer** (orange): also immune to α — its rate-based error signal
+  automatically tracks actual drain regardless of fulfilment ratio.
 
 **Controller ranking under model mismatch:**
 
-| Controller | α = 1 | α = 0.7 | α = 0.5 | Robustness |
-|------------|-------|---------|---------|------------|
-| Smith (naive) | 100% | ~70% | ~50% | None — mirrors α |
-| Corrected denom | ~100% | ~100% | ~100% | Good at small τ, degrades at large τ |
-| Smith adaptive | 100% | ~98% | ~95% | Good — lag of one τ window |
+| Controller | α = 1 | α = 0.7 | α = 0.5 | Why robust? |
+|------------|-------|---------|---------|-------------|
+| Smith naive | 100% | ~70% | ~50% | Not robust — mirrors α directly |
+| Corrected denom | ~100% | ~100% | ~100% | No internal model; degrades at large τ |
+| PIDPacer | ~87% | ~87% | ~87% | Rate-based: sees actual drain; baseline under-delivery persists |
+| Smith adaptive | 100% | ~98% | ~95% | Estimates α̂; lag of one τ window |
 
-**Key takeaway.** The adaptive Smith predictor is strictly better than the
-naive Smith when fulfilment is uncertain, and better than corrected-denom at
-large τ.  Its only weakness is a one-window lag in tracking α changes — in
-steady-state or slowly-varying conditions it is the best available controller.
+**Key observations:**
+
+- The PIDPacer's baseline under-delivery (~87% at τ=15%) is *unchanged* by
+  α — the rate error self-corrects, but the slow integral still takes time to
+  wind up. The mismatch does not make it worse or better.
+- The adaptive Smith is the only controller that achieves both delay tolerance
+  (like plain Smith) and mismatch robustness (like PIDPacer), at the cost of
+  needing three lags and a one-window estimation period.
+- At large τ (e.g. 30%·T) the corrected-denom controller degrades while the
+  adaptive Smith and PIDPacer remain stable — making them the preferred choices
+  in high-latency environments with uncertain fulfilment.
 
 ```julia
 # Perfect model — B(T) = 0 exactly
@@ -304,7 +335,7 @@ solve_budget_smith_mismatch(τ = 1.5, α = 0.7)
 # Adaptive Smith — estimates α̂ and compensates
 solve_budget_smith_adaptive(τ = 1.5, α = 0.7)
 
-# Compare all four controllers across fulfilment rates
+# Compare all five controllers across fulfilment rates
 demo_smith_mismatch()
 demo_smith_mismatch(τ = 3.0, alphas = [0.95, 0.8, 0.6])
 ```

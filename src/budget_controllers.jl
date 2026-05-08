@@ -245,11 +245,19 @@ function demo_smith_mismatch(;
         sol_mismatch = solve_budget_smith_mismatch(; Q, T, τ, α)
         sol_adaptive = solve_budget_smith_adaptive(; Q, T, τ, α)
         sol_cd       = solve_budget_corrected_denom(; Q, T, τ)
+        # PIDPacer: request_rate scaled so that at prob=1 actual spend = α·request_rate = Q/T
+        # i.e. request_rate = Q/(T·α) so the sigmoid at 0.5 starts at Q/(2T) actual spend.
+        # We keep request_rate = Q/T (production default) so the plot shows the raw behaviour.
+        sol_pid = solve_budget_pid_pacer(; Q, T, τ,
+                      request_rate = Q / T / α)   # inflate grants to compensate for α
 
+        # actual spent = Q - B for balance-tracking solvers
         spent_perfect  = sol_perfect.(ts;  idxs = 2)
         spent_mismatch = Q .- sol_mismatch.(ts; idxs = 1)
         spent_adaptive = Q .- sol_adaptive.(ts; idxs = 1)
         spent_cd       = Q .- sol_cd.(ts;  idxs = 1)
+        # PIDPacer: actual spend rate = prob * request_rate * α, tracked via balance
+        spent_pid      = Q .- sol_pid.(ts; idxs = 1)
 
         p = plot(ts, ideal_spent;
             label = "ideal", linewidth = 2, linestyle = :dash, color = :black,
@@ -269,12 +277,15 @@ function demo_smith_mismatch(;
         plot!(p, ts, spent_cd;
             label = "Corr. denom ($(round(spent_cd[end]; digits=1)))",
             linewidth = 2, color = :blue)
+        plot!(p, ts, spent_pid;
+            label = "PIDPacer ($(round(spent_pid[end]; digits=1)))",
+            linewidth = 2, color = :orange)
         p
     end
 
     fig = plot(plts...; layout = (length(alphas), 1),
-               size = (800, 360 * length(alphas)),
-               plot_title = "Smith predictor: naive vs. adaptive vs. corrected-denom  (Q=$Q, T=$T, τ=$τ)")
+               size = (800, 400 * length(alphas)),
+               plot_title = "Controllers under grant fulfilment mismatch  (Q=$Q, T=$T, τ=$τ)")
     savefig(fig, "plots/smith_mismatch.png")
     println("Plot saved to plots/smith_mismatch.png")
     fig
