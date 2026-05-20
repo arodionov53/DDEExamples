@@ -22,6 +22,7 @@ include("pid/pid_simulation.jl")
 include("smith/smith_simulation.jl")
 include("corrdenom/corrdenom_simulation.jl")
 include("mpc/mpc_simulation.jl")
+include("artstein/artstein_simulation.jl")
 
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
@@ -52,6 +53,9 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        run_mpc_simulation, run_single_mpc_scenario!,
        create_default_mpc_simulation_use_cases,
        MPCPacer, MPCConfig, MPCResult, calculate_mpc_mode!,
+       run_artstein_simulation, run_single_artstein_scenario!,
+       create_default_artstein_simulation_use_cases,
+       ArtsteinPacer, ArtsteinConfig, ArtsteinResult, calculate_artstein_mode!,
        SimulationUseCase, CampaignMetadata, CampaignState, SimulationConfig,
        tick!, tick_with!, should_tick,
        plot_simulation
