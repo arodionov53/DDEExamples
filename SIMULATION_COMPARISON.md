@@ -14,7 +14,7 @@ Comparison of five budget pacing controllers under production-realistic stochast
 
 ## Results
 
-All five controllers pass every scenario with **zero violations** on deterministic and moderately stochastic scenarios. The extreme scenario (`unstable_eligible_impressions_with_spikes`) can produce sporadic hard violations due to 200x traffic spikes — this is expected and the test marks it `ignore_pacing_violations_while_in_flight = true`.
+All five controllers pass every scenario with **zero violations** on deterministic and moderately stochastic scenarios (1–11). The extreme scenario (`unstable_eligible_impressions_with_spikes`) produces sporadic hard violations due to 200x traffic spikes — this is expected and the test marks it `ignore_pacing_violations_while_in_flight = true`.
 
 ### Per-Scenario Breakdown
 
@@ -31,21 +31,26 @@ All five controllers pass every scenario with **zero violations** on determinist
 | resumed_near_end_of_flight | 0H 0S | 0H 0S | 0H 0S | 0H 0S | 0H 0S |
 | resumed_over_paced_near_end_of_flight | 0H 0S | 0H 0S | 0H 0S | 0H 0S | 0H 0S |
 | compensate_for_spikes | 0H 0S | 0H 0S | 0H 0S | 0H 0S | 0H 0S |
-| unstable_eligible_impressions_with_spikes | 0–1H* | 0–1H* | 0H 0S | 0–1H* | 0–1H* |
+| unstable_eligible_impressions_with_spikes | 0–1H* | 0–1H* | 0–1H* | 0–1H* | 0–1H* |
 
 \* Stochastic — 200x traffic spikes with low base rate (10 imp/s, σ=200) can trigger budget overshoot regardless of controller. This scenario has `ignore_pacing_violations_while_in_flight = true`.
 
-### Unstable Scenario Reliability (5 runs each)
+### Unstable Scenario Reliability (10 runs each)
 
-| Controller | Hard violations across 5 runs |
-|---|---|
-| PID | [0, 0, 0, 0, 0] |
-| Smith | [0, 1, 0, 0, 0] |
-| CorrDenom | [0, 0, 0, 0, 0] |
-| MPC | [0, 0, 1, 0, 0] |
-| Artstein | [1, 1, 0, 0, 1] |
+| Controller | Hard violations across 10 runs | Failure rate |
+|---|---|:---:|
+| **PID** | [0, 0, 0, 1, 0, 1, 0, 0, 0, 0] | **20%** |
+| **CorrDenom** | [0, 1, 0, 0, 0, 0, 1, 0, 0, 0] | **20%** |
+| **Smith** | [0, 1, 0, 0, 0, 0, 1, 1, 0, 0] | **30%** |
+| **MPC** | [0, 0, 0, 1, 1, 0, 1, 0, 0, 0] | **30%** |
+| **Artstein** | [1, 0, 0, 1, 0, 1, 1, 1, 1, 0] | **60%** |
 
-CorrDenom and PID appear most robust to extreme spikes, followed by Smith and MPC. Artstein is slightly more prone to overshoot under bursty conditions because the integral predictor accumulates noisy rate estimates.
+**Ranking under extreme spike conditions** (lower failure rate = better):
+1. PID, CorrDenom (20%) — most robust
+2. Smith, MPC (30%) — moderate
+3. Artstein (60%) — least robust under extreme noise
+
+The Artstein predictor integrates noisy instantaneous rates over the full delay window, which amplifies spike effects. PID and CorrDenom are more robust because PID's integral provides damping, and CorrDenom's simple formula has no state that accumulates errors.
 
 ## Constraint Definitions
 
@@ -94,21 +99,22 @@ Each scenario runs under production-realistic conditions:
 | **Delay compensation** | Implicit (integral accumulates) | Point-difference S(t) - S(t-τ) | Adds τ to denominator | Adaptive α̂ + Smith | ∫ rate(s) ds over [t-τ, t] |
 | **History used** | Last error only | 1 point at t-τ | None (stateless) | 2 points at t-τ, t-2τ | Full buffer over [t-τ, t] |
 | **Model complexity** | 3 tunable params (Kp, Ki, Kd) | 1 param (τ) | 1 param (τ) | 1 param (τ) + adaptive α̂ | 1 param (τ) |
-| **Robustness to noise** | High (integral smooths) | Moderate | High (simple formula) | Moderate (α̂ can be noisy) | Moderate (integral of noisy rate) |
+| **Robustness to noise** | High (integral smooths) | Moderate | High (simple formula) | Moderate (α̂ can be noisy) | Low (integral of noisy rate) |
 | **Theoretical optimality** | Sub-optimal (5–20% under-delivery in DDE model) | Optimal when model is exact | Near-optimal at small τ | Optimal + safe when α̂ accurate | Optimal (equivalent to Smith in continuous limit) |
 | **Safety under uncertainty** | Conservative (never overspends) | Can overspend if model wrong | Conservative (under-delivers at large τ) | Explicitly capped at safe rate | Can overspend under extreme noise |
+| **Extreme spike robustness** | 20% failure | 30% failure | 20% failure | 30% failure | 60% failure |
 
 ## Analysis
 
-In the discrete-time simulation all five controllers are equally **safe** under normal-to-moderate stochastic conditions (scenarios 1–11). The `totalExposure` signal (spent + pending + projected outstanding) provides partial delay compensation that benefits all controllers equally.
+**Scenarios 1–11 (normal to moderate conditions):** All five controllers are equally safe — zero violations. The simulation's `totalExposure` signal (spent + pending + projected outstanding) provides partial delay compensation that benefits all controllers.
 
-Under **extreme conditions** (scenario 12: 200x spikes with near-zero baseline), the controllers rank by robustness:
-1. **CorrDenom** — most robust; simple formula has no state that can accumulate errors
-2. **PID** — robust; integral provides damping against spike-induced oscillations
-3. **Smith/MPC** — occasional violations when spike timing aligns poorly with the delay window
-4. **Artstein** — slightly more fragile; integrating noisy rates over the full window can amplify spike effects
+**Scenario 12 (extreme 200x spikes):** Controllers diverge significantly:
 
-The theoretical differences (Smith = optimal, PID = conservative) are more visible in the continuous-time DDE models. See `dde-vs-go-pid-simulation.md` for the full comparison.
+- **PID and CorrDenom** are most robust (20% failure rate). PID benefits from integral damping that smooths spike transients. CorrDenom's stateless formula means no accumulated error from past spikes.
+- **Smith and MPC** are moderate (30%). Smith's point-difference can be thrown off when a spike occurs between the current and delayed observation. MPC inherits this from its adaptive Smith component.
+- **Artstein** is least robust (60%). The trapezoidal integral over [t-τ, t] faithfully captures the spike's instantaneous rate, which then inflates the predicted spend and causes the controller to under-throttle on the next tick.
+
+**Theoretical vs practical performance:** The continuous-time DDE models show Smith and Artstein as mathematically optimal, but in discrete-time with extreme noise, simpler controllers (PID, CorrDenom) outperform because they don't try to reconstruct exact state from noisy observations.
 
 ## How to Reproduce
 
