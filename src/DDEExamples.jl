@@ -20,6 +20,8 @@ include("simulation/plot_simulation.jl")
 
 include("pid/pid_simulation.jl")
 include("smith/smith_simulation.jl")
+include("corrdenom/corrdenom_simulation.jl")
+include("mpc/mpc_simulation.jl")
 
 export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_delay,
        solve_mackey_glass_nodelay, solve_logistic_nodelay, solve_two_delay_nodelay,
@@ -44,6 +46,12 @@ export solve_mackey_glass, solve_logistic_dde, solve_two_delay, solve_random_del
        run_smith_simulation, run_single_smith_scenario!,
        create_default_smith_simulation_use_cases,
        SmithPacer, SmithConfig, SmithResult, calculate_smith_mode!,
+       run_corrdenom_simulation, run_single_corrdenom_scenario!,
+       create_default_corrdenom_simulation_use_cases,
+       CorrDenomPacer, CorrDenomConfig, CorrDenomResult, calculate_corrdenom_mode!,
+       run_mpc_simulation, run_single_mpc_scenario!,
+       create_default_mpc_simulation_use_cases,
+       MPCPacer, MPCConfig, MPCResult, calculate_mpc_mode!,
        SimulationUseCase, CampaignMetadata, CampaignState, SimulationConfig,
        tick!, tick_with!, should_tick,
        plot_simulation
